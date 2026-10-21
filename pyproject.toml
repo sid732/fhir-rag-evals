@@ -1,0 +1,40 @@
+[project]
+name = "fhir-rag-evals"
+version = "0.1.0"
+description = "Question answering over synthetic FHIR R4 records, with cited answers and an evaluation harness"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "mypy>=2.4.0",
+    "pytest>=9.1.1",
+    "ruff>=0.17.1",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.3,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "fhir_rag"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes: unused imports, undefined names
+    "I",    # import sorting
+    "B",    # bugbear: likely bugs, such as mutable default arguments
+    "UP",   # pyupgrade: modern syntax for the target Python version
+    "SIM",  # simplifications
+    "RUF",  # ruff's own checks
+]
+
+[tool.mypy]
+strict = true
+files = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
