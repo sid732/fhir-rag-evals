@@ -1,0 +1,69 @@
+# Answer eval with real model calls: on demand, weekly, and on pull requests
+# labeled llm-eval. Costs money, so it has a spend cap and isn't run on every
+# push. It reports numbers without failing until the run-to-run noise has been
+# measured; then thresholds go above that noise.
+name: llm-eval
+
+on:
+  workflow_dispatch:
+    inputs:
+      split:
+        type: choice
+        options: [dev, test]
+        default: dev
+      limit:
+        description: Only the first N questions (blank for all)
+        default: ""
+      spend_cap:
+        description: Stop starting new questions after this many dollars
+        default: "10"
+  schedule:
+    - cron: "0 6 * * 1" # Mondays, 06:00 UTC
+  pull_request:
+    types: [labeled, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  answers:
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'llm-eval')
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      FASTEMBED_CACHE_PATH: ${{ github.workspace }}/.cache/fastembed
+      SPLIT: ${{ inputs.split || 'dev' }}
+      LIMIT: ${{ inputs.limit }}
+      SPEND_CAP: ${{ inputs.spend_cap || '10' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          version: "0.13.3"
+          enable-cache: true
+      - run: uv sync --locked
+      - name: Restore embedding model and index
+        uses: actions/cache@v6
+        with:
+          path: |
+            .cache/fastembed
+            data/index.sqlite
+          key: index-${{ hashFiles('data/cohort/MANIFEST.sha256', 'src/fhir_rag/fhir/**', 'src/fhir_rag/retrieval/summary.py', 'src/fhir_rag/ingest.py', 'src/fhir_rag/store.py') }}
+          restore-keys: index-
+      - run: uv run python -m fhir_rag.ingest
+      - name: Answer eval
+        run: |
+          args=(--run "ci-${{ github.run_id }}" --split "$SPLIT" --spend-cap "$SPEND_CAP")
+          if [ -n "$LIMIT" ]; then args+=(--limit "$LIMIT"); fi
+          uv run python -m fhir_rag.evals.run_answers "${args[@]}"
+      - name: Report to the job summary
+        if: always()
+        run: cat evals/reports/answers-ci-*.md >> "$GITHUB_STEP_SUMMARY" || true
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: answer-eval-${{ github.run_id }}
+          path: |
+            evals/runs/ci-${{ github.run_id }}/
+            evals/reports/answers-ci-${{ github.run_id }}.md

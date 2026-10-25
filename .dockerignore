@@ -1,0 +1,11 @@
+.git
+.github
+.venv
+.cache
+.env
+**/__pycache__
+.mypy_cache
+.pytest_cache
+.ruff_cache
+data/index.sqlite
+evals/runs

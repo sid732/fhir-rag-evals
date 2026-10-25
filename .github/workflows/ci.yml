@@ -1,0 +1,45 @@
+# Every push and pull request: lint, types, tests, and the retrieval eval gate.
+# No API key needed; nothing here costs money (PLAN.md D16).
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      FASTEMBED_CACHE_PATH: ${{ github.workspace }}/.cache/fastembed
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          version: "0.13.3"
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run ruff format --check .
+      - run: uv run ruff check .
+      - run: uv run mypy
+      - run: uv run pytest
+      # The index file also caches embeddings by card text, so a restore from an
+      # older key still saves work: ingest only embeds cards whose text changed.
+      - name: Restore embedding model and index
+        uses: actions/cache@v6
+        with:
+          path: |
+            .cache/fastembed
+            data/index.sqlite
+          key: index-${{ hashFiles('data/cohort/MANIFEST.sha256', 'src/fhir_rag/fhir/**', 'src/fhir_rag/retrieval/summary.py', 'src/fhir_rag/ingest.py', 'src/fhir_rag/store.py') }}
+          restore-keys: index-
+      - run: uv run python -m fhir_rag.ingest
+      - name: Retrieval eval against the committed baseline
+        run: uv run python -m fhir_rag.evals.run_retrieval --split dev --check
+      - name: Report to the job summary
+        if: always()
+        run: test -f evals/reports/retrieval-dev.md && cat evals/reports/retrieval-dev.md >> "$GITHUB_STEP_SUMMARY" || true

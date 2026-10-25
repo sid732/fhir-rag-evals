@@ -1,0 +1,17 @@
+# docker compose up --build, then open http://localhost:8000/docs
+# Put ANTHROPIC_API_KEY in .env to enable /ask; everything else works without it.
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - index:/app/index # the built index, kept between runs
+      - models:/app/.cache # the downloaded embedding model
+
+volumes:
+  index:
+  models:
