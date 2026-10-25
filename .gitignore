@@ -16,3 +16,12 @@ dist/
 
 # macOS
 .DS_Store
+
+# Built index (make ingest)
+data/index.sqlite
+
+# Local caches (CI points FASTEMBED_CACHE_PATH here)
+.cache/
+
+# Answer-eval runs: per-case transcripts, large and regenerable
+evals/runs/
