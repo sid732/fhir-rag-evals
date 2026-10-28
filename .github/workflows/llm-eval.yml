@@ -38,7 +38,7 @@ jobs:
       SPEND_CAP: ${{ inputs.spend_cap || '10' }}
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.2 # this action has no floating major tag
         with:
           version: "0.13.3"
           enable-cache: true
