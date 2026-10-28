@@ -43,8 +43,13 @@ jobs:
           version: "0.13.3"
           enable-cache: true
       - run: uv sync --locked
+      # The index file also caches embeddings by card text, so a restore from an
+      # older key still saves work: ingest only embeds cards whose text changed.
+      # The cache is saved right after ingest, so a later failing step can't
+      # throw away a 10-minute cold build.
       - name: Restore embedding model and index
-        uses: actions/cache@v6
+        id: index-cache
+        uses: actions/cache/restore@v6
         with:
           path: |
             .cache/fastembed
@@ -52,6 +57,14 @@ jobs:
           key: index-${{ hashFiles('data/cohort/MANIFEST.sha256', 'src/fhir_rag/fhir/**', 'src/fhir_rag/retrieval/summary.py', 'src/fhir_rag/ingest.py', 'src/fhir_rag/store.py') }}
           restore-keys: index-
       - run: uv run python -m fhir_rag.ingest
+      - name: Save embedding model and index
+        if: steps.index-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            .cache/fastembed
+            data/index.sqlite
+          key: index-${{ hashFiles('data/cohort/MANIFEST.sha256', 'src/fhir_rag/fhir/**', 'src/fhir_rag/retrieval/summary.py', 'src/fhir_rag/ingest.py', 'src/fhir_rag/store.py') }}
       - name: Answer eval
         run: |
           args=(--run "ci-${{ github.run_id }}" --split "$SPLIT" --spend-cap "$SPEND_CAP")

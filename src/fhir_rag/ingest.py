@@ -77,7 +77,10 @@ def build_index(
 
     embedded = 0
     if embedder is not None:
-        missing = store.missing_embeddings(embedder.model_name)
+        # Sorted by length so each batch pads to a similar size. In hash order
+        # most batches hold one long note chunk and pad every short card to it;
+        # measured on 2 threads, sorting cuts a full embed from ~48 to ~11 minutes.
+        missing = sorted(store.missing_embeddings(embedder.model_name), key=lambda p: len(p[1]))
         for start in range(0, len(missing), batch):
             part = missing[start : start + batch]
             vectors = embedder.embed_documents([text for _, text in part])

@@ -13,7 +13,7 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45 # a cold cache embeds every card (~11 min on 2 cores)
     env:
       FASTEMBED_CACHE_PATH: ${{ github.workspace }}/.cache/fastembed
     steps:
@@ -29,8 +29,11 @@ jobs:
       - run: uv run pytest
       # The index file also caches embeddings by card text, so a restore from an
       # older key still saves work: ingest only embeds cards whose text changed.
+      # The cache is saved right after ingest, so a later failing step can't
+      # throw away a 10-minute cold build.
       - name: Restore embedding model and index
-        uses: actions/cache@v6
+        id: index-cache
+        uses: actions/cache/restore@v6
         with:
           path: |
             .cache/fastembed
@@ -38,6 +41,14 @@ jobs:
           key: index-${{ hashFiles('data/cohort/MANIFEST.sha256', 'src/fhir_rag/fhir/**', 'src/fhir_rag/retrieval/summary.py', 'src/fhir_rag/ingest.py', 'src/fhir_rag/store.py') }}
           restore-keys: index-
       - run: uv run python -m fhir_rag.ingest
+      - name: Save embedding model and index
+        if: steps.index-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            .cache/fastembed
+            data/index.sqlite
+          key: index-${{ hashFiles('data/cohort/MANIFEST.sha256', 'src/fhir_rag/fhir/**', 'src/fhir_rag/retrieval/summary.py', 'src/fhir_rag/ingest.py', 'src/fhir_rag/store.py') }}
       - name: Retrieval eval against the committed baseline
         run: uv run python -m fhir_rag.evals.run_retrieval --split dev --check
       - name: Report to the job summary
