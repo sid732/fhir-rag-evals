@@ -13,7 +13,7 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 45 # a cold cache embeds every card (~11 min on 2 cores)
+    timeout-minutes: 60 # a cold cache embeds every card: about 36 minutes on a GitHub runner
     env:
       FASTEMBED_CACHE_PATH: ${{ github.workspace }}/.cache/fastembed
     steps:
@@ -30,7 +30,7 @@ jobs:
       # The index file also caches embeddings by card text, so a restore from an
       # older key still saves work: ingest only embeds cards whose text changed.
       # The cache is saved right after ingest, so a later failing step can't
-      # throw away a 10-minute cold build.
+      # throw away a 36-minute cold build.
       - name: Restore embedding model and index
         id: index-cache
         uses: actions/cache/restore@v6
