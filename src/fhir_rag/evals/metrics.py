@@ -97,8 +97,10 @@ def unsupported_numbers_and_dates(sentence: str, evidence: Sequence[str]) -> lis
     is the most harmful error, and this check is free and exact.
     """
     joined = " ".join(evidence)
-    known_numbers = numbers_in(joined)
     known_dates = dates_in(joined)
+    # A bare year ("stable between 2021 and 2023") is supported by any cited
+    # date in that year.
+    known_numbers = numbers_in(joined) | {float(d[:4]) for d in known_dates}
     missing = [d for d in sorted(dates_in(sentence)) if d not in known_dates]
     missing += [f"{n:g}" for n in sorted(numbers_in(sentence)) if n not in known_numbers]
     return missing

@@ -68,7 +68,7 @@ make eval-selftest               # oracle and null answers through the whole har
 make eval-answers RUN=pilot      # real model calls; costs money (see below)
 ```
 
-`run_answers` writes one line per question as it finishes, resumes an interrupted run, sends failed attempts to `errors.jsonl` instead of scoring them as wrong, and stops at `--spend-cap` dollars (default 10). From the measured prompt size (about 2,400 tokens), one question costs roughly $0.03 with Opus 5.5 answering and Sonnet 5.5 judging, so the 164-question dev split is about $5. Run a small pilot first (`--limit 10`) to replace that estimate with measured usage.
+`run_answers` writes one line per question as it finishes, resumes an interrupted run, sends failed attempts to `errors.jsonl` instead of scoring them as wrong, and stops at `--spend-cap` dollars (default 10). A 10-question pilot measured $0.036 per question with Opus 5.5 answering and Sonnet 5.5 judging (about 4,500 input and 660 output tokens per answer), so the 164-question dev split costs about $6. See [the pilot report](evals/reports/answers-pilot.md).
 
 CI (`.github/workflows/ci.yml`) runs lint, strict mypy, tests and the retrieval eval on every push, and fails on any cross-patient leak or on a drop of more than one question in recall@10, hit@10 or MRR against `evals/baselines/retrieval-dev.json`. The answer eval runs on demand, weekly, and on pull requests labeled `llm-eval` (`.github/workflows/llm-eval.yml`).
 

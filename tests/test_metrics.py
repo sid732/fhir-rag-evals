@@ -47,6 +47,10 @@ def test_numbers_and_dates_must_appear_in_cited_cards() -> None:
     assert unsupported_numbers_and_dates(ok, [card]) == []
     bad = "The most recent HbA1c was 6.9% on 2026-03-05."
     assert unsupported_numbers_and_dates(bad, [card]) == ["2026-03-05", "6.9"]
+    # Years count when a cited card has a date in that year; others don't.
+    trend = "It was stable between 2026 and 2025."
+    assert unsupported_numbers_and_dates(trend, [card, "Observation | 2025-01-09 | x"]) == []
+    assert unsupported_numbers_and_dates("Unchanged since 2019.", [card]) == ["2019"]
 
 
 def test_key_facts_compare_numbers_as_numbers() -> None:

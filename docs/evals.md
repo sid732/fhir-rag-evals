@@ -69,6 +69,6 @@ uv run python -m fhir_rag.evals.calibrate score
 
 ## Not measured yet
 
-- Any real-model answer metric: no API key is configured yet. Start with a pilot: `make eval-answers RUN=pilot` with `--limit 10`.
+- Real-model answer metrics beyond the 10-question pilot ([report](../evals/reports/answers-pilot.md)): $0.36 in all, faithfulness 0.967, citation validity 0.988. The pilot's 10 questions are the first 10 dev ids (7 active-problem lists, 3 HbA1c trends), so they say little about other categories or abstention.
 - Run-to-run noise: three repetitions of the dev answer eval (`--reps 3`). The answer-eval CI gate waits on this number.
 - Judge agreement with hand labels.
