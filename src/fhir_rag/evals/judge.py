@@ -9,7 +9,10 @@ cited card can show that nothing later or nothing else exists. One call per
 answer, structured output.
 
 Version 1 judged every sentence against its cited cards alone and marked most
-"most recent" claims as unverifiable (docs/evals.md has the comparison).
+"most recent" claims as unverifiable. Version 2 fixed that but graded each
+sentence apart from the rest of its answer and guessed about entries it wasn't
+shown. Version 3 reads each sentence within its answer and writes its reason
+before its verdict. docs/evals.md has the comparisons.
 
 Its numbers only count after calibration against hand labels
 (fhir_rag.evals.calibrate).
@@ -30,15 +33,15 @@ from fhir_rag.retrieval.retriever import Retrieved
 
 type Verdict = Literal["supported", "partially_supported", "not_supported"]
 
-JUDGE_PROMPT_FILE = Path(__file__).parent / "prompts" / "judge_v2.txt"
+JUDGE_PROMPT_FILE = Path(__file__).parent / "prompts" / "judge_v3.txt"
 JUDGE_SYSTEM = JUDGE_PROMPT_FILE.read_text()
-JUDGE_VERSION = f"judge_v2-{hashlib.sha256(JUDGE_SYSTEM.encode()).hexdigest()[:8]}"
+JUDGE_VERSION = f"{JUDGE_PROMPT_FILE.stem}-{hashlib.sha256(JUDGE_SYSTEM.encode()).hexdigest()[:8]}"
 
 
 class SentenceVerdict(BaseModel):
     index: int
+    reason: str  # before the verdict, so the verdict is generated after the reasoning
     verdict: Verdict
-    reason: str
 
 
 class JudgeOutput(BaseModel):
@@ -83,6 +86,7 @@ def judge_prompt(
     question: str, sentences: list[CheckedSentence], retrieved: list[Retrieved], as_of: str
 ) -> str:
     parts = [render_context(retrieved, as_of), "", f"Question asked: {question}", ""]
+    parts += ["Answer: " + " ".join(s.text for s in sentences), ""]
     for index, sentence in enumerate(sentences):
         parts.append(f"Sentence {index}: {sentence.text}")
         cited = [

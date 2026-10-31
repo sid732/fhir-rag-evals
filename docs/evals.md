@@ -60,12 +60,14 @@ For every case: a confusion matrix of answered vs "not in record" against answer
 The faithfulness number means little until the judge is checked against independent labels:
 
 ```bash
-uv run python -m fhir_rag.evals.calibrate sample --run <run-name> --n 50
-# label every line of evals/labels/judge_calibration.jsonl by hand
-uv run python -m fhir_rag.evals.calibrate score
+uv run python -m fhir_rag.evals.calibrate sample --run <run-name> --n 50 [--set NAME]
+# write s, p or n on every `label:` line of evals/labels/NAME.md
+uv run python -m fhir_rag.evals.calibrate score [--set NAME] [--run <run-name>]
 ```
 
-`sample` keeps the judge's verdicts in a separate file, so labeling is blind. `score` prints agreement, Cohen's kappa (three classes, and supported-vs-not), and a confusion table. The target is at least 90% agreement on clear cases; revise `src/fhir_rag/evals/prompts/judge_v2.txt` until it's met. `make eval-rejudge FROM=<run> RUN=<new-run>` re-grades a finished run's answers with the current judge, so a prompt change costs only judge calls (about $2 for dev).
+`sample` writes a sheet with each sentence inside its whole answer, the cards it cites, and everything the model saw, and keeps the judge's verdicts in `NAME.verdicts.jsonl` so labeling is blind. The judge flags few sentences, so a random sample would hold almost none: up to half the sample is flagged sentences, the rest are drawn from those the judge passed, and each carries a weight that maps its stratum back to the run. Sentences already in another set are skipped, so a new set is held out from the old ones. A `?` after a label marks a case the labeler finds unclear.
+
+`score` prints agreement on the sample and on clear cases, agreement and the share of supported sentences weighted back to the run (by the labels and by the judge), Cohen's kappa, and a confusion table. `--run` scores another run's verdicts on the same labels, which is how a revised judge is compared with the old one; the weights still hold, because they come from how the set was drawn. The target is at least 90% agreement on clear cases. `make eval-rejudge FROM=<run> RUN=<new-run>` re-grades a finished run's answers with the current judge, so a prompt change costs only judge calls (about $2 for dev).
 
 ## Judge v1 and v2
 
@@ -79,16 +81,34 @@ Judge v2 (`prompts/judge_v2.txt`) checks such claims against the whole context, 
 | partially supported | 80 | 4 |
 | not supported | 1 | 0 |
 
-Faithfulness went from 0.635 to 0.976 [0.960, 0.991]. v2 is not simply more lenient, but it isn't clean either. Reading all 8 of its flags and its 81 upgrades:
+Faithfulness went from 0.635 to 0.976 [0.960, 0.991], for $1.97 of judge calls ($0.014 per answer; v2 reads about 6,200 input tokens, v1 about 1,400). Whether v2 was right is the next section.
 
-- Two flags are judge errors. One marks "the active prescriptions are A to E" as incomplete although the next sentence adds F; v2 still judges each sentence alone. The other gives a reason that says the sentence is supported, then marks it partial.
-- One real catch was lost. v1 noticed that an answer folded a separate "awaiting kidney transplant" condition into the CKD stage 4 entry; v2 passed it.
-- The other flags are defensible strictness: a flu shot said to be given "at that visit" when the immunization isn't linked to the encounter, and a "stated reason" that comes from an uncited entry.
+## Checking the judge against blind reference labels
 
-These are notes from one read-through, not a measurement. The hand-labeled calibration set decides whether v2 needs another revision. Re-judging cost $1.97 ($0.014 per answer; v2 reads about 6,200 input tokens, v1 about 1,400).
+Two label sets, 50 sentences each, were labeled on 2026-10-30 by Claude Opus 5.5, a stronger model than the judge, in batches of 10 sentences. Each batch saw the rubric and its own items, never a judge's verdicts, and gave a reason for every label. Every factual claim in a reason that decided a disagreement was checked against the cards, and all of them held.
+
+- **Set 1** ([sheet](../evals/labels/judge_calibration.md)): v2's 8 flags plus 42 of its 282 passes, weighted to all 290 sentences.
+- **Set 2** ([sheet](../evals/labels/judge_calibration_2.md)): drawn after v3 existed, from the 240 sentences not in set 1: v3's one flag there plus 49 of its passes. v3 was written after reading set 1, so set 2 is the held-out check.
+
+| Judge | Set 1, clear cases | Set 1, weighted | Set 2, clear cases | Set 2, weighted | Sentences supported, set 1 / set 2 |
+|---|---:|---:|---:|---:|---:|
+| Labels | | | | | 0.970 / 0.980 |
+| v1 | 0.659 | 0.669 | 0.688 | 0.675 | 0.685 / 0.695 |
+| v2 | 0.909 | 0.956 | 1.000 | 0.980 | 0.972 / 1.000 |
+| v3 | 1.000 | 0.977 | 0.979 | 0.976 | 0.993 / 0.996 |
+
+"Clear cases" is agreement on the sample, leaving out the items labelers marked unclear (6 in set 1, 2 in set 2). "Weighted" is agreement estimated for the whole run. The last column is the share of sentences supported, per sentence; the reports' faithfulness is a mean over answers.
+
+**What v2 got wrong.** Its passes held up (41 of 42 in set 1), its flags didn't. The labels confirm 2 of its 8 flags: a prescription tied to a visit only by a matching date, and a "stated reason" that comes from cards the sentence doesn't cite. A third ("at that visit" for a same-day flu shot) could go either way. The other five are judge errors: a list the next sentence completes, a reason that calls the sentence supported, a "most recent" date that is the latest one shown, an "only medication" that is the only one with that reason, and a "prior panel" that is the one before. Two of the five came from guessing about entries it wasn't shown. Cohen's kappa on set 1 is 0.30.
+
+**Judge v3** (`prompts/judge_v3.txt`, [report](../evals/reports/answers-dev-1-judge3.md)) reads each sentence as part of the whole answer, repeats that only the excerpts count, says entries can appear in clinical notes, and writes its reason before its verdict, so the verdict comes after the reasoning instead of before it. On set 1 it fixed all five errors, kept both correct flags, and passed "at that visit"; kappa 0.79. Re-judging cost $2.07, and faithfulness is 0.993 [0.985, 1.000].
+
+**On held-out data v3 is no better than v2.** Both pass nearly everything in set 2. v3's one flag there ("metformin has been prescribed since 2021-11-21") is wrong by the labels. So v3's gain is shown only on the set it was designed from; the fresh set says it is no worse, not that it is better. Set 2 has too few flags for kappa to mean anything.
+
+**Blind spot.** Both v2 and v3 missed 2 of 2 omissions: answers that listed past entries and skipped ones that appear only in clinical notes (a flu shot in a 2018 note; four Humulin prescriptions in notes). The answers share the weakness, and the judge reports about two points too high because of it: 0.993 to 0.996 of sentences supported by v3, 0.970 to 0.980 by the labels. A faithfulness of about 0.97 to 0.98 is the better headline.
 
 ## Not measured yet
 
-- Judge agreement with hand labels. Until then, faithfulness is the judge's opinion.
+- Judge agreement with clinician labels.
 - Run-to-run noise: three repetitions of the dev answer eval (`--reps 3`). The answer-eval CI gate waits on this number.
 - The answer eval on the test split.

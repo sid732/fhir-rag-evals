@@ -19,7 +19,7 @@ Retrieval, measured on 274 labeled questions over 15 patients (164 dev, 110 held
 
 No configuration retrieved a card from another patient's record. Full reports: [dev](evals/reports/retrieval-dev.md), [test](evals/reports/retrieval-test.md).
 
-Answers, on the 164 dev questions (Opus 5.5 answering, Sonnet 5.5 judging; [report](evals/reports/answers-dev-1-judge2.md)):
+Answers, on the 164 dev questions (Opus 5.5 answering, Sonnet 5.5 judging; [report](evals/reports/answers-dev-1-judge3.md)):
 
 | Metric | Dev |
 |---|---:|
@@ -28,11 +28,11 @@ Answers, on the 164 dev questions (Opus 5.5 answering, Sonnet 5.5 judging; [repo
 | Citation recall | 0.957 |
 | Numbers and dates found in the cited cards | 0.979 |
 | Key facts present (87 value and date questions) | 1.000 |
-| Faithfulness, judge v2 (not yet calibrated against hand labels) | 0.976 |
+| Faithfulness, judge v3 (reads about 2 points high; see below) | 0.993 |
 | Cost per question, generator + judge | $0.040 |
 | Latency p50 / p95 | 3.8 s / 8.4 s |
 
-The model wrongly said "not in record" once in 141 answerable questions. Faithfulness from the first judge was 0.635; [docs/evals.md](docs/evals.md#judge-v1-and-v2) explains why that judge was wrong and what the second one still gets wrong. No test-split answer run yet.
+The model wrongly said "not in record" once in 141 answerable questions. The judge went through three versions. The first scored faithfulness 0.635 because it couldn't check "most recent" claims. 100 sentences labeled blind by Opus 5.5, a stronger model than the judge, put the share of supported sentences at 0.97 to 0.98, against 0.993 to 0.996 from the current judge, which misses answers that leave out entries found only in clinical notes. [docs/evals.md](docs/evals.md#checking-the-judge-against-blind-reference-labels) has the comparison. No test-split answer run yet.
 
 ## How it works
 
@@ -81,7 +81,7 @@ make eval-selftest               # oracle and null answers through the whole har
 make eval-answers RUN=pilot      # real model calls; costs money (see below)
 ```
 
-`run_answers` writes one line per question as it finishes, resumes an interrupted run, sends failed attempts to `errors.jsonl` instead of scoring them as wrong, and stops at `--spend-cap` dollars (default 10). The dev split measured $0.0275 per question to answer and $0.014 per answer to judge, $6.49 for all 164 questions. `make eval-rejudge FROM=<run> RUN=<new-run>` re-grades stored answers with the current judge, which costs only the judge calls.
+`run_answers` writes one line per question as it finishes, resumes an interrupted run, sends failed attempts to `errors.jsonl` instead of scoring them as wrong, and stops at `--spend-cap` dollars (default 10). The dev split measured $0.0275 per question to answer and $0.015 per answer to judge, about $6.60 for all 164 questions. `make eval-rejudge FROM=<run> RUN=<new-run>` re-grades stored answers with the current judge, which costs only the judge calls.
 
 CI (`.github/workflows/ci.yml`) runs lint, strict mypy, tests and the retrieval eval on every push, and fails on any cross-patient leak or on a drop of more than one question in recall@10, hit@10 or MRR against `evals/baselines/retrieval-dev.json`. The answer eval runs on demand, weekly, and on pull requests labeled `llm-eval` (`.github/workflows/llm-eval.yml`).
 

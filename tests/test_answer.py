@@ -109,6 +109,8 @@ def test_judge_sees_the_whole_context_and_every_sentence(
         # A resource citation shows that resource's cards; an uncited sentence still goes.
         assert f"  cited [{cited.resource_ref}]: {cited.text}" in user
         assert "Sentence 1: No other entry is recorded.\n  cites nothing" in user
+        # The whole answer comes first, so each sentence is read in its context.
+        assert "Answer: Cited and supported. No other entry is recorded. Cited," in user
         return {
             "verdicts": [
                 {"index": 0, "verdict": "supported", "reason": "stated"},
