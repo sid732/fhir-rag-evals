@@ -1,6 +1,10 @@
+import json
+from pathlib import Path
+
 import pytest
 
-from fhir_rag.evals.calibrate import cohen_kappa
+from fhir_rag.evals import calibrate
+from fhir_rag.evals.calibrate import Label, cohen_kappa, read_labels, stratified, summarize
 from fhir_rag.evals.metrics import (
     Abstention,
     bootstrap_ci,
@@ -75,6 +79,69 @@ def test_cluster_bootstrap_brackets_the_mean() -> None:
 def test_cohen_kappa() -> None:
     assert cohen_kappa(["a", "b", "a", "b"], ["a", "b", "a", "b"]) == 1.0
     assert cohen_kappa(["a", "a", "b", "b"], ["a", "b", "a", "b"]) == 0.0
+
+
+def test_stratified_sample_keeps_the_flags_and_weights_each_stratum() -> None:
+    items = [(f"s{i}", "supported") for i in range(20)]
+    items += [("p1", "partially_supported"), ("n1", "not_supported")]
+    picked = stratified(items, 6)
+    weights = {key: weight for key, _, weight in picked}
+    assert len(picked) == 6 and weights["p1"] == weights["n1"] == 1.0
+    # The four passes sampled stand for all twenty.
+    assert sum(w for _, verdict, w in picked if verdict == "supported") == 20
+
+
+def test_labels_are_read_from_the_sheet_and_scored() -> None:
+    sheet = "\n".join(
+        [
+            "## 1. `a#0#0`",
+            "```text",
+            "label: n",  # inside a card: ignored
+            "```",
+            "</details>",
+            "label: s",
+            "## 2. `b#0#0`",
+            "</details>",
+            "label: P?",
+            "## 3. `c#0#0`",
+            "</details>",
+            "label: ",
+        ]
+    )
+    labels = read_labels(sheet)
+    assert labels == {
+        "a#0#0": Label("supported", True),
+        "b#0#0": Label("partially_supported", False),
+    }
+    verdicts = {k: {"judge": "supported", "weight": 2.0} for k in ("a#0#0", "b#0#0", "c#0#0")}
+    lines = summarize(labels, verdicts)
+    assert lines[0] == "2 of 3 sentences labeled, 1 marked unclear"
+    assert lines[1] == "agreement 0.500 on the sample, 1.000 on clear cases"
+
+
+def test_score_can_grade_a_later_judge_on_the_same_labels(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(calibrate, "LABELS_DIR", tmp_path / "labels")
+    sheet, verdicts = calibrate.set_paths("set")
+    sheet.parent.mkdir()
+    sheet.write_text("## 1. `q#0#0`\n</details>\nlabel: s\n## 2. `q#0#1`\n</details>\nlabel: p\n")
+    rows = [{"key": f"q#0#{i}", "judge": "partially_supported", "weight": 1.0} for i in (0, 1)]
+    verdicts.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    run = tmp_path / "evals" / "runs" / "later"
+    run.mkdir(parents=True)
+    judged = {
+        "question_id": "q",
+        "rep": 0,
+        "judge": {"verdicts": ["supported", "partially_supported"]},
+    }
+    (run / "results.jsonl").write_text(json.dumps(judged) + "\n")
+
+    assert calibrate.score("set") == 0
+    assert "agreement 0.500 on the sample" in capsys.readouterr().out
+    assert calibrate.score("set", "later") == 0
+    assert "agreement 1.000 on the sample" in capsys.readouterr().out
 
 
 def test_baseline_check_allows_one_question_of_noise() -> None:
