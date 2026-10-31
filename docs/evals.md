@@ -43,7 +43,7 @@ Intervals are 95% cluster-bootstrap CIs that resample patients rather than quest
 - **Citation precision and recall**: overlap of the valid citations with the gold groups. Precision undercounts when the model cites a relevant card that isn't gold, such as an older result in a trend answer; the judge covers that case.
 - **Numbers and dates in cited cards**: of the sentences that state a number or date, the share whose numbers and dates all appear in the cards that sentence cites. Deterministic and free, and aimed at the most harmful error: a wrong value or date.
 - **Key facts present**: for questions with key facts (values and dates), the share that appear in the answer. Numbers compare as numbers, so 6.80 matches 6.8.
-- **Faithfulness**: share of sentences the judge (claude-sonnet-5-5) marks fully supported by the cards they cite. Partial support is reported separately.
+- **Faithfulness**: share of sentences the judge (claude-sonnet-5-5) marks fully supported. Facts about specific entries (values, dates, statuses) must be in the cards the sentence cites. Claims about the record as a whole ("most recent", "only", counts, "no record of") are checked against the whole context the model saw, because no single card can show that nothing later exists. Partial support is reported separately.
 - **Gold evidence in context**: whether retrieval gave the model what it needed. It separates retrieval misses from generation misses.
 
 For every case: a confusion matrix of answered vs "not in record" against answerable vs not, with precision and recall for "not in record". Cost comes from recorded usage and list prices (`src/fhir_rag/llm/pricing.py`); latency is reported at p50 and p95.
@@ -65,10 +65,30 @@ uv run python -m fhir_rag.evals.calibrate sample --run <run-name> --n 50
 uv run python -m fhir_rag.evals.calibrate score
 ```
 
-`sample` keeps the judge's verdicts in a separate file, so labeling is blind. `score` prints agreement, Cohen's kappa (three classes, and supported-vs-not), and a confusion table. The target is at least 90% agreement on clear cases; revise `src/fhir_rag/evals/prompts/judge_v1.txt` until it's met.
+`sample` keeps the judge's verdicts in a separate file, so labeling is blind. `score` prints agreement, Cohen's kappa (three classes, and supported-vs-not), and a confusion table. The target is at least 90% agreement on clear cases; revise `src/fhir_rag/evals/prompts/judge_v2.txt` until it's met. `make eval-rejudge FROM=<run> RUN=<new-run>` re-grades a finished run's answers with the current judge, so a prompt change costs only judge calls (about $2 for dev).
+
+## Judge v1 and v2
+
+The first full dev run ([report](../evals/reports/answers-dev-1.md)) used judge v1, which saw only the cards each sentence cited. It scored faithfulness 0.635 while every deterministic check was near perfect. Of the 85 sentences it didn't mark supported, 74 were flagged only for a claim about the whole record, such as "the most recent reading was ..." with one reading cited. v1 couldn't check those claims, because the evidence for "most recent" is the absence of anything later. Key facts were 1.000 against gold computed from the raw bundles, so those claims were right.
+
+Judge v2 (`prompts/judge_v2.txt`) checks such claims against the whole context, and it also judges sentences that cite nothing (one answer said, correctly, that no low red cell count diagnosis was recorded). The same 290 sentences, re-judged ([report](../evals/reports/answers-dev-1-judge2.md)):
+
+| v1 verdict | v2: supported | v2: partially supported |
+|---|---:|---:|
+| supported | 201 | 4 |
+| partially supported | 80 | 4 |
+| not supported | 1 | 0 |
+
+Faithfulness went from 0.635 to 0.976 [0.960, 0.991]. v2 is not simply more lenient, but it isn't clean either. Reading all 8 of its flags and its 81 upgrades:
+
+- Two flags are judge errors. One marks "the active prescriptions are A to E" as incomplete although the next sentence adds F; v2 still judges each sentence alone. The other gives a reason that says the sentence is supported, then marks it partial.
+- One real catch was lost. v1 noticed that an answer folded a separate "awaiting kidney transplant" condition into the CKD stage 4 entry; v2 passed it.
+- The other flags are defensible strictness: a flu shot said to be given "at that visit" when the immunization isn't linked to the encounter, and a "stated reason" that comes from an uncited entry.
+
+These are notes from one read-through, not a measurement. The hand-labeled calibration set decides whether v2 needs another revision. Re-judging cost $1.97 ($0.014 per answer; v2 reads about 6,200 input tokens, v1 about 1,400).
 
 ## Not measured yet
 
-- Real-model answer metrics beyond the 10-question pilot ([report](../evals/reports/answers-pilot.md)): $0.36 in all, faithfulness 0.967, citation validity 0.988. The pilot's 10 questions are the first 10 dev ids (7 active-problem lists, 3 HbA1c trends), so they say little about other categories or abstention.
+- Judge agreement with hand labels. Until then, faithfulness is the judge's opinion.
 - Run-to-run noise: three repetitions of the dev answer eval (`--reps 3`). The answer-eval CI gate waits on this number.
-- Judge agreement with hand labels.
+- The answer eval on the test split.

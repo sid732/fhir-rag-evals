@@ -51,6 +51,11 @@ def write_report(run_dir: Path, out: Path) -> Path:
         "",
         f"{len(rows)} graded cases, {len(errors)} failed attempts (not scored).",
     ]
+    if meta.get("answers_from"):
+        lines.append(
+            f"Answers reused from run {meta['answers_from']} and judged again; "
+            "the generator cost below was spent there."
+        )
     if errors:
         kinds: dict[str, int] = {}
         for e in errors:

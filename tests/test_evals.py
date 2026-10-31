@@ -7,12 +7,14 @@ from cohort import P1, P2, bundle, patient_one, patient_two
 from fhir_rag.config import Settings
 from fhir_rag.evals.build_questions import check_gold
 from fhir_rag.evals.questions import Question, assign_splits
+from fhir_rag.evals.rejudge import load_chunks, rejudge
 from fhir_rag.evals.report_answers import write_report
 from fhir_rag.evals.run_answers import null_llm, oracle_llm, run
 from fhir_rag.evals.templates import template_questions
 from fhir_rag.llm.answer import AnswerService
 from fhir_rag.llm.client import FakeLLM, LLMTimeout
 from fhir_rag.retrieval.retriever import Retriever
+from fhir_rag.store import Store
 
 
 def _by_slug(questions: list[Question]) -> dict[str, Question]:
@@ -137,3 +139,47 @@ def test_failed_attempts_go_to_errors_and_resume_retries_them(
     )
     rows = (tmp_path / "r" / "results.jsonl").read_text().splitlines()
     assert len(rows) == 3  # the second pass resumed and found nothing left to do
+
+
+def test_rejudge_keeps_answers_and_rebuilds_the_judged_context(
+    tmp_path: Path, retriever: Retriever, store: Store, settings: Settings
+) -> None:
+    def verdict(label: str) -> FakeLLM:
+        return FakeLLM(
+            lambda s, u, t: {"verdicts": [{"index": 0, "verdict": label, "reason": "-"}]}
+        )
+
+    first = verdict("supported")
+    asyncio.run(
+        run(
+            _questions(),
+            lambda q: AnswerService(retriever, oracle_llm(q), settings),
+            first,
+            settings,
+            tmp_path / "src",
+            1,
+            4,
+            100.0,
+            None,
+        )
+    )
+    rows = [json.loads(line) for line in (tmp_path / "src" / "results.jsonl").open()]
+    second = verdict("partially_supported")
+    chunks = load_chunks(store, rows)
+    for _ in range(2):  # the second pass resumes and finds nothing left to do
+        asyncio.run(rejudge(rows, second, settings, chunks, tmp_path / "new", 4, 100.0))
+
+    # The context rebuilt from the index is exactly what the judge saw the first time.
+    assert first.calls and sorted(second.calls) == sorted(first.calls)
+    new = {
+        r["question_id"]: r for r in map(json.loads, (tmp_path / "new" / "results.jsonl").open())
+    }
+    assert len(new) == len(rows)
+    for old in rows:
+        row = new[old["question_id"]]
+        assert row["answer"] == old["answer"] and row["cost_usd"] == old["cost_usd"]
+        if old.get("judge"):
+            assert row["judge"]["verdicts"] == ["partially_supported"]
+            assert row["scores"]["faithfulness"] == 0.0
+        else:  # abstentions are copied, still unjudged
+            assert "judge" not in row and "faithfulness" not in row["scores"]

@@ -28,7 +28,7 @@ from typing import Any
 
 from fhir_rag.config import Settings, get_settings
 from fhir_rag.evals.common import git_version
-from fhir_rag.evals.judge import judge_answer
+from fhir_rag.evals.judge import JUDGE_VERSION, judge_answer
 from fhir_rag.evals.metrics import (
     citation_scores,
     dates_in,
@@ -144,24 +144,13 @@ async def run_case(
         "scores": score_case(q, result),
     }
     if judge is not None and result.answer.status == "answered" and result.answer.sentences:
-        cards = {r.chunk.chunk_id: r.chunk.text for r in result.retrieved}
-        cards |= {r.chunk.resource_ref: r.chunk.text for r in result.retrieved}
-        verdict = await judge_answer(judge, settings, q.question, result.answer, cards)
-        row["judge"] = {
-            "verdicts": verdict.verdicts,
-            "reasons": verdict.reasons,
-            "model": verdict.model,
-            "usage": verdict.usage.__dict__,
-            "cost_usd": verdict.cost_usd,
-        }
-        if verdict.verdicts:
-            n = len(verdict.verdicts)
-            row["scores"]["faithfulness"] = verdict.verdicts.count("supported") / n
-            row["scores"]["partially_supported"] = verdict.verdicts.count("partially_supported") / n
+        verdict = await judge_answer(judge, settings, q.question, result.answer, result.retrieved)
+        row["judge"] = verdict.as_row()
+        row["scores"] |= verdict.scores()
     return row
 
 
-def _done(path: Path) -> set[tuple[str, int]]:
+def done_cases(path: Path) -> set[tuple[str, int]]:
     if not path.exists():
         return set()
     rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
@@ -186,7 +175,7 @@ async def run(
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     results_path, errors_path = out_dir / "results.jsonl", out_dir / "errors.jsonl"
-    done = _done(results_path)
+    done = done_cases(results_path)
     spent = sum(
         _row_cost(json.loads(line))
         for line in (results_path.read_text().splitlines() if results_path.exists() else [])
@@ -281,10 +270,12 @@ def main(argv: Sequence[str] | None = None, embedder: Embedder | None = None) ->
     meta = {
         "commit": git_version(),
         "cohort": store.meta("cohort_hash") or "",
+        "card_version": store.meta("card_version") or "",
         "mode": args.mode,
         "generator": settings.generator_model if args.mode == "real" else args.mode,
         "effort": settings.generator_effort,
         "judge": None if args.no_judge else settings.judge_model,
+        "judge_prompt": None if args.no_judge else JUDGE_VERSION,
         "retrieval": f"{settings.retrieval_mode}, k={settings.top_k}, "
         f"series={settings.series_expansion}, summary={settings.pin_summary}",
         "split": args.split,

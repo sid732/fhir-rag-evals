@@ -1,4 +1,4 @@
-.PHONY: setup data profile ingest questions serve eval-retrieval eval-answers eval-selftest fmt lint typecheck test check
+.PHONY: setup data profile ingest questions serve eval-retrieval eval-answers eval-rejudge eval-selftest fmt lint typecheck test check
 
 SPLIT ?= dev
 RUN ?= $(SPLIT)-$(shell date +%Y%m%d)
@@ -33,6 +33,11 @@ eval-retrieval:
 # Calls the API (generator and judge). Costs money; see --spend-cap.
 eval-answers:
 	uv run python -m fhir_rag.evals.run_answers --run $(RUN) --split $(SPLIT)
+
+# Judge an earlier run's answers again with the current judge. Calls the API
+# for the judge only. FROM is the earlier run; RUN names the new one.
+eval-rejudge:
+	uv run python -m fhir_rag.evals.rejudge --from $(FROM) --run $(RUN)
 
 # Oracle and null runs through the whole harness, offline. Oracle should score
 # near the top and null near zero; anything else means the harness is broken.

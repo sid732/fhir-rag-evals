@@ -89,22 +89,34 @@ def test_cost_from_usage() -> None:
     assert cost_usd("some-unlisted-model", usage) is None
 
 
-def test_judge_skips_uncited_sentences_and_fills_missing_verdicts(settings: Settings) -> None:
+def test_judge_sees_the_whole_context_and_every_sentence(
+    retriever: Retriever, settings: Settings
+) -> None:
+    retrieved = retriever.retrieve(P1, "a1c", RetrievalConfig(mode="bm25", k=3))
+    cited = retrieved[-1].chunk
     answer = CheckedAnswer(
         "answered",
         [
-            CheckedSentence("Cited and supported.", ["Observation/a"], []),
-            CheckedSentence("No citation at all.", [], []),
-            CheckedSentence("Cited, but the judge skips it.", ["Observation/a"], []),
+            CheckedSentence("Cited and supported.", [cited.resource_ref], []),
+            CheckedSentence("No other entry is recorded.", [], []),
+            CheckedSentence("Cited, but the judge skips it.", [cited.chunk_id], []),
         ],
     )
 
     def respond(system: str, user: str, schema: type[Any]) -> dict[str, Any]:
-        assert "Sentence 1" not in user  # the uncited sentence never reaches the judge
-        return {"verdicts": [{"index": 0, "verdict": "supported", "reason": "stated"}]}
+        # Every card the generator saw is in the prompt, not just the cited ones.
+        assert all(f"[{r.chunk.chunk_id}] {r.chunk.text}" in user for r in retrieved)
+        # A resource citation shows that resource's cards; an uncited sentence still goes.
+        assert f"  cited [{cited.resource_ref}]: {cited.text}" in user
+        assert "Sentence 1: No other entry is recorded.\n  cites nothing" in user
+        return {
+            "verdicts": [
+                {"index": 0, "verdict": "supported", "reason": "stated"},
+                {"index": 1, "verdict": "supported", "reason": "no other entry in the record"},
+            ]
+        }
 
-    cards = {"Observation/a": "card text"}
-    result = asyncio.run(judge_answer(FakeLLM(respond), settings, "q?", answer, cards))
-    assert result.verdicts == ["supported", "not_supported", "not_supported"]
-    assert result.reasons[1] == "cites no excerpt from the context"
+    result = asyncio.run(judge_answer(FakeLLM(respond), settings, "q?", answer, retrieved))
+    assert result.verdicts == ["supported", "supported", "not_supported"]
     assert "no verdict" in result.reasons[2]
+    assert result.scores() == {"faithfulness": 2 / 3, "partially_supported": 0.0}
