@@ -9,7 +9,7 @@ for that reason. An empty list means the record can't answer the question.
 
 import hashlib
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Literal
 
@@ -47,27 +47,26 @@ class Question(BaseModel):
         return bool(self.gold_groups)
 
 
-def assign_splits(questions: Iterable[Question]) -> list[Question]:
-    """60/40 dev/test within each category, decided by a hash of the id.
+def assign_splits(
+    questions: Iterable[Question], fixed: Mapping[str, Split] | None = None
+) -> list[Question]:
+    """Dev or test for every question, decided once and then never moved.
 
-    Hash order is fixed before any tuning, doesn't depend on file order, and
-    keeps a question's split stable when other questions are added.
+    A question in `fixed` (the split file as last built) keeps its split. A
+    new one goes to dev when the hash of its id falls in the first 60% of the
+    hash range, so its split depends on nothing but its id. The first build
+    ranked hashes within each category instead, an exact 60/40 that moved
+    other questions' splits whenever one was added; `fixed` keeps the splits
+    it made.
     """
-    by_category: dict[str, list[Question]] = {}
-    for q in questions:
-        by_category.setdefault(q.category, []).append(q)
-    out: list[Question] = []
-    for category in CATEGORIES:
-        group = sorted(
-            by_category.get(category, []),
-            key=lambda q: hashlib.sha256(q.id.encode()).hexdigest(),
-        )
-        n_dev = round(len(group) * DEV_SHARE)
-        out += [
-            q.model_copy(update={"split": "dev" if i < n_dev else "test"})
-            for i, q in enumerate(group)
-        ]
+    fixed = fixed or {}
+    out = [q.model_copy(update={"split": fixed.get(q.id) or _split_of(q.id)}) for q in questions]
     return sorted(out, key=lambda q: q.id)
+
+
+def _split_of(question_id: str) -> Split:
+    share = int(hashlib.sha256(question_id.encode()).hexdigest()[:8], 16) / 16**8
+    return "dev" if share < DEV_SHARE else "test"
 
 
 def load_questions(path: Path, split: Split | None = None) -> list[Question]:

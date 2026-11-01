@@ -4,21 +4,21 @@ How the evaluation harness works, what each number means, and what hasn't been m
 
 ## The question set
 
-`evals/questions/questions.jsonl` holds 274 questions over the 15 patients, built by `make questions`. Each question has a patient, a category, gold evidence, optional key facts, a source, and a split.
+`evals/questions/questions.jsonl` holds 275 questions over the 15 patients, built by `make questions`. Each question has a patient, a category, gold evidence, optional key facts, a source, and a split.
 
 | Category | Dev | Test | Examples |
 |---|---:|---:|---|
 | fact_lookup | 34 | 23 | current medications, active diagnoses, allergies, smoking status, vaccines in the last year |
 | values_dates | 60 | 40 | latest lab result and date, latest blood pressure, latest lipid panel, last flu shot, last visit, last colonoscopy |
 | lay_terms | 18 | 12 | "Has the patient ever been diagnosed with high blood pressure?" |
-| multi_step | 29 | 19 | medications prescribed for a condition, HbA1c trend over three results, reason for the last ER visit |
-| not_in_record | 23 | 16 | labs never measured, conditions never diagnosed, tests Synthea never generates (blood type, HIV viral load), colonoscopy never done |
+| multi_step | 31 | 19 | medications prescribed for a condition, HbA1c trend over three results, reason for the last ER visit |
+| not_in_record | 23 | 15 | labs never measured, conditions never diagnosed, tests Synthea never generates (blood type, HIV viral load), colonoscopy never done |
 
 **Gold labels are computed from the raw bundles** by `src/fhir_rag/evals/templates.py`, which parses FHIR with plain dict access and shares nothing with the service except the bundle loader. A parsing bug in the service's views or cards can't hide in the labels too. `build_questions` checks that every gold ref exists in that patient's record and that every "not in record" question has no gold.
 
 **Gold evidence is a list of groups.** Each group holds interchangeable refs: retrieving or citing any one of them counts for the group. "Latest HbA1c" has one group with one ref, the newest result. "What was prescribed for hypertension?" has one group per drug, holding every prescription of that drug for that reason. Recall counts groups, not refs.
 
-**The split** is 60/40 dev/test within each category, decided by a hash of the question id. It was fixed before any tuning, and a question's split doesn't change when others are added. Design decisions were made on dev; test was scored after.
+**The split** was fixed before any tuning: the first build sent 60% of each category to dev by ranking hashes of the question ids. After that a question keeps its split, and a new question goes to dev when its id's hash falls in the first 60% of the hash range, so adding questions never moves others. (Ranking did move them: when the label fixes below added two questions, one dev question would have gone to test. That's how the bug was found, and `build_questions` now reads the existing splits before assigning new ones.) Design decisions were made on dev; test was scored after.
 
 **Hand-written questions** go in `evals/questions/drafted.jsonl` (same format, `source: "human"`), and `make questions` merges them in. None exist yet.
 
@@ -50,7 +50,7 @@ For every case: a confusion matrix of answered vs "not in record" against answer
 
 ## Harness checks
 
-- `make eval-selftest` runs **oracle** answers (built from the gold labels) and **null** answers ("I don't know", no citations) through the whole pipeline. On dev, the oracle gets key facts 1.000, precision 0.950 and recall 0.950 (the same as the context recall, its true ceiling), and abstains correctly on every "not in record" question. Null gets 0 on precision, recall and key facts, and never abstains. Two bugs were caught this way and fixed: precision and recall were counting citations that had already been removed, and two metrics passed empty answers vacuously.
+- `make eval-selftest` runs **oracle** answers (built from the gold labels) and **null** answers ("I don't know", no citations) through the whole pipeline. On dev, the oracle gets key facts 1.000, precision 0.951 and recall 0.951 (the same as the context recall, its true ceiling), and abstains correctly on every "not in record" question. Null gets 0 on precision, recall and key facts, and never abstains. Two bugs were caught this way and fixed: precision and recall were counting citations that had already been removed, and two metrics passed empty answers vacuously.
 - Failed attempts (timeouts, API errors, refusals, unparseable output) go to `errors.jsonl` with a failure class and are never scored as wrong answers. Every case is written as it finishes, and an interrupted run resumes.
 - The model that served each answer is recorded. If a refusal fallback answered instead of the requested model, the row is flagged.
 - Each report records the commit, cohort hash, card version, models, effort and retrieval settings.
@@ -107,8 +107,48 @@ Two label sets, 50 sentences each, were labeled on 2026-10-30 by Claude Opus 5.5
 
 **Blind spot.** Both v2 and v3 missed 2 of 2 omissions: answers that listed past entries and skipped ones that appear only in clinical notes (a flu shot in a 2018 note; four Humulin prescriptions in notes). The answers share the weakness, and the judge reports about two points too high because of it: 0.993 to 0.996 of sentences supported by v3, 0.970 to 0.980 by the labels. A faithfulness of about 0.97 to 0.98 is the better headline.
 
+## The test split
+
+The first run on the test questions ([test-1](../evals/reports/answers-test-1.md), 2026-10-31) used the same models, prompts, retrieval settings and judge v3 as dev, through the CLI backend described below. All 110 cases were graded; none failed. Reading every miss against the raw bundles turned up four wrong labels. The fixes went into the templates, so they apply to every patient in both splits, not just to those four questions:
+
+- `last_er_visit` took the latest emergency encounter *that has a reasonCode*, so when the latest one had no reason, gold pointed at an older visit. That was true for 3 of the 5 test patients with the question and none of the 7 dev patients. In all three the model named the true latest visit and said it had no recorded reason, and twice it also gave the older visit and its reason. Gold is now the latest emergency encounter, and two dev patients whose emergency visits all lack a reason now get the question too.
+- `missing_lab` and `latest_labs` looked under one LOINC code per lab, but Synthea records glucose, creatinine, potassium and sodium under a whole-blood code and a serum-or-plasma code. One patient was asked for "potassium" as an unanswerable question while the record has it under 2823-3 rather than 6298-4, and the model reported that result. Both templates now look under every code (`SAME_LAB`). The potassium question is gone, and one dev glucose question's gold group gained the same-day serum result.
+
+The second run ([test-2](../evals/reports/answers-test-2.md)) keeps test-1's answers for the 106 test questions whose labels didn't change, and asked the three ER questions again; all three were answered correctly again.
+
+| Metric | Dev (API) | Test-1, old labels | Test-2 |
+|---|---:|---:|---:|
+| "Not in record" precision / recall | 0.958 / 1.000 | 0.938 / 0.938 | 0.938 / 1.000 |
+| Citation recall | 0.957 | 0.914 | 0.925 |
+| Gold evidence in context | 0.957 | 0.914 | 0.925 |
+| Numbers and dates in cited cards | 0.979 | 0.968 | 0.968 |
+| Key facts present | 1.000 | 0.984 | 1.000 |
+| Faithfulness, judge v3 | 0.993 | 0.986 | 0.986 |
+
+What's left on test:
+
+- **One retrieval miss.** The latest lipid panel of one patient wasn't in the context, and the model said it found notes mentioning a lipid panel but no values. That's the one answerable question it declined.
+- **One wrong comparison, caught by the judge.** An answer called a lipid panel's values higher than the next day's when HDL was lower.
+- **One judge flag on conflicting record data.** "The only active prescription is ferrous sulfate" matches the medication statuses, but a 2025 note still lists norethindrone and an IUD among current medications, and the judge marked the sentence partially supported.
+- **Numbers and dates.** Three of the four sentences flagged state the record's as-of date (2026-10-01), which is in the prompt but in no card; the fourth gives a date in a sentence that cites nothing.
+- **Smoking status** accounts for most of the lower citation recall in `fact_lookup`, as on dev: answers cite the notes that say "never smoked", while gold is the structured smoking-status Observation, which retrieval misses (BM25 has no stemming).
+
+Labels were fixed after test had been scored, so test-1 is kept as it was scored, and the table shows both. Test also differs from dev in two ways at once, the questions and the backend, so the small drops can't be put down to either one. Cost per question was $0.050 at list price (nothing was billed), against $0.040 on dev, from the CLI's extra input and output tokens, and latency was higher for the reasons below.
+
+## Running on a Claude subscription
+
+`FHIR_RAG_LLM_BACKEND=cli` sends every generator and judge call through the Claude Code CLI (`claude -p`) on a logged-in Claude subscription instead of the API, so a run uses the plan's limits instead of API credits. `FHIR_RAG_CLAUDE_CONFIG_DIR` picks the login. `ClaudeCodeLLM` (`llm/client.py`) replaces Claude Code's system prompt with ours, turns off tools, settings files (hooks, plugins, CLAUDE.md), MCP servers and prompt caching, runs in an empty directory, and removes `ANTHROPIC_API_KEY` from the CLI's environment so a call can't bill the API.
+
+It is close to the API path, not the same:
+
+- Claude Code still adds a line before the system prompt, an environment block with today's date, and an account reminder. With the tool it uses for structured output, that's about 1,000 extra input tokens per call. The prompts give the record's as-of date, which is what "most recent" and "last year" are judged against.
+- Structured output takes an extra model turn, so model calls are slower: 8.0 s and 16.2 s through the CLI against 4.3 s and 4.4 s through the API, on the same two dev questions.
+- There is no refusal fallback; Claude Code retries rate limits and server errors itself.
+
+On those two questions the CLI answers stated the same values and dates as the API answers, and the judge (also through the CLI) marked every sentence supported. A CLI run's cost is the list price of its tokens, though nothing is billed, and its latency isn't the API's. The cost and latency in the README come from API runs.
+
 ## Not measured yet
 
 - Judge agreement with clinician labels.
 - Run-to-run noise: three repetitions of the dev answer eval (`--reps 3`). The answer-eval CI gate waits on this number.
-- The answer eval on the test split.
+- Whether a whole run through the CLI backend scores the same as one through the API.

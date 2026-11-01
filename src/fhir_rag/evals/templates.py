@@ -36,6 +36,15 @@ LAB_NAMES = {
     "6298-4": "potassium",
     "2947-0": "sodium",
 }
+# Synthea records these labs under a second LOINC code too, serum or plasma
+# beside whole blood. Either one answers a question about the lab, so the
+# templates look under every code; the first code still names the question.
+SAME_LAB = {
+    "2339-0": ("2345-7",),  # glucose
+    "38483-4": ("2160-0",),  # creatinine
+    "6298-4": ("2823-3",),  # potassium
+    "2947-0": ("2951-2",),  # sodium
+}
 LABS_PER_PATIENT = 2
 BLOOD_PRESSURE = "85354-9"
 FLU_VACCINE = "140"
@@ -255,22 +264,34 @@ class _Builder:
         ]
         return max(matches, key=lambda r: r.get("effectiveDateTime", ""), default=None)
 
+    def _latest_lab(self, code: str) -> list[dict[str, Any]]:
+        """Every result of one lab at its latest time, under any of its codes, first code first."""
+        codes = (code, *SAME_LAB.get(code, ()))
+        matches = [
+            r for r in self.by_type["Observation"] if _first_code(r.get("code"), LOINC) in codes
+        ]
+        latest = max((r.get("effectiveDateTime", "") for r in matches), default=None)
+        return sorted(
+            (r for r in matches if r.get("effectiveDateTime", "") == latest),
+            key=lambda r: codes.index(_first_code(r.get("code"), LOINC)),
+        )
+
     def latest_labs(self) -> None:
-        present = [c for c in LAB_NAMES if self._latest_observation(c) is not None]
+        present = [c for c in LAB_NAMES if self._latest_lab(c)]
         for code in sorted(present, key=lambda c: _order(self.pid, c))[:LABS_PER_PATIENT]:
-            obs = self._latest_observation(code)
-            assert obs is not None
-            value = obs.get("valueQuantity", {}).get("value")
+            results = self._latest_lab(code)
+            value = results[0].get("valueQuantity", {}).get("value")
             if value is None:
                 continue
-            day = obs["effectiveDateTime"][:10]
+            day = results[0]["effectiveDateTime"][:10]
             self.add(
                 f"latest-lab-{code}",
                 "values_dates",
                 f"What was the patient's most recent {LAB_NAMES[code]} result, "
                 "and when was it measured?",
-                [[_ref(obs)]],
+                [[_ref(r) for r in results]],
                 [_num(value), day],
+                note="results at the latest time under any of the lab's codes are one group",
             )
 
     def latest_blood_pressure(self) -> None:
@@ -451,11 +472,7 @@ class _Builder:
             )
 
     def last_er_visit(self) -> None:
-        visits = [
-            r
-            for r in self.by_type["Encounter"]
-            if r.get("class", {}).get("code") == "EMER" and r.get("reasonCode")
-        ]
+        visits = [r for r in self.by_type["Encounter"] if r.get("class", {}).get("code") == "EMER"]
         latest = max(visits, key=lambda r: r["period"].get("start", ""), default=None)
         if latest is not None:
             self.add(
@@ -464,7 +481,7 @@ class _Builder:
                 "Why was the patient last seen in the emergency department, and when?",
                 [[_ref(latest)]],
                 [latest["period"]["start"][:10]],
-                note="latest EMER Encounter that has a reasonCode",
+                note="latest EMER Encounter; when it has no reasonCode, the answer should say so",
             )
 
     # --- not in record ---
@@ -482,7 +499,7 @@ class _Builder:
             )
 
     def missing_lab(self) -> None:
-        absent = [c for c in LAB_NAMES if self._latest_observation(c) is None]
+        absent = [c for c in LAB_NAMES if not self._latest_lab(c)]
         if absent:
             code = min(absent, key=lambda c: _order(self.pid, "missing:" + c))
             self.add(
@@ -490,7 +507,7 @@ class _Builder:
                 "not_in_record",
                 f"What was the patient's most recent {LAB_NAMES[code]} result?",
                 [],
-                note=f"no Observation with LOINC {code}",
+                note=f"no Observation with LOINC {', '.join((code, *SAME_LAB.get(code, ())))}",
             )
 
 

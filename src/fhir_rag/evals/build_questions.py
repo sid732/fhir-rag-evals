@@ -4,7 +4,8 @@
 
 Template questions come from fhir_rag.evals.templates. Drafted questions live
 in evals/questions/drafted.jsonl (written by hand, with gold refs checked
-against the record). The split is assigned here, once, by hash of the id.
+against the record). Splits are assigned here: a question already in
+questions.jsonl keeps its split, and a new one gets one from its id's hash.
 """
 
 import sys
@@ -68,10 +69,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     if problems:
         print("\n".join(problems), file=sys.stderr)
         return 1
-    final = assign_splits(questions)
+    fixed = {q.id: q.split for q in load_questions(OUTPUT) if q.split} if OUTPUT.exists() else {}
+    final = assign_splits(questions, fixed)
     save_questions(OUTPUT, final)
     counts = Counter((q.category, q.split) for q in final)
-    print(f"{len(final)} questions -> {OUTPUT}")
+    new = [q for q in final if q.id not in fixed]
+    gone = set(fixed) - {q.id for q in final}
+    print(f"{len(final)} questions -> {OUTPUT} ({len(new)} new, {len(gone)} no longer generated)")
     for category in sorted({c for c, _ in counts}):
         dev, test = counts[(category, "dev")], counts[(category, "test")]
         print(f"  {category:14} dev {dev:3}  test {test:3}")

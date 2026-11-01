@@ -2,11 +2,11 @@ import asyncio
 import json
 from pathlib import Path
 
-from cohort import P1, P2, bundle, patient_one, patient_two
+from cohort import P1, P2, bundle, observation, patient_one, patient_two
 
 from fhir_rag.config import Settings
 from fhir_rag.evals.build_questions import check_gold
-from fhir_rag.evals.questions import Question, assign_splits
+from fhir_rag.evals.questions import Question, Split, assign_splits
 from fhir_rag.evals.rejudge import load_chunks, rejudge
 from fhir_rag.evals.report_answers import write_report
 from fhir_rag.evals.run_answers import null_llm, oracle_llm, run
@@ -43,6 +43,31 @@ def test_templates_compute_gold_from_the_raw_record() -> None:
     assert qs["never-colonoscopy"].gold_groups == []
     # The patient has hypertension, so "never had high blood pressure" isn't asked.
     assert "never-high-blood-pressure" not in qs
+    # The latest ER visit is the gold even though it records no reason.
+    assert qs["last-er-visit"].gold_groups == [["Encounter/p1-enc-2026"]]
+    assert qs["last-er-visit"].key_facts == ["2026-06-01"]
+
+
+def test_lab_templates_look_under_every_code_for_the_lab() -> None:
+    def potassium(rid: str, code: str, where: str, date: str) -> dict[str, object]:
+        return observation(
+            rid, P2, code, f"Potassium [Moles/volume] in {where}", 4.7, "mmol/L", date
+        )
+
+    serum = potassium("p2-k-serum", "2823-3", "Serum or Plasma", "2026-02-02")
+    qs = _by_slug(template_questions(P2, bundle([*patient_two(), serum])))
+    # Potassium is recorded only under its serum code: it's asked about, not called missing.
+    assert qs["latest-lab-6298-4"].gold_groups == [["Observation/p2-k-serum"]]
+    assert qs["latest-lab-6298-4"].key_facts == ["4.7", "2026-02-02"]
+    assert "missing-lab-6298-4" not in qs
+
+    older = potassium("p2-k-2025", "6298-4", "Blood", "2025-01-01")
+    blood = potassium("p2-k-blood", "6298-4", "Blood", "2026-02-02")
+    qs = _by_slug(template_questions(P2, bundle([*patient_two(), older, blood, serum])))
+    # Results at the same latest time under both codes are interchangeable.
+    assert qs["latest-lab-6298-4"].gold_groups == [
+        ["Observation/p2-k-blood", "Observation/p2-k-serum"]
+    ]
 
 
 def test_gold_checks_catch_refs_from_another_record() -> None:
@@ -58,7 +83,7 @@ def test_gold_checks_catch_refs_from_another_record() -> None:
     assert check_gold([q], refs) == ["x:p2: Observation/p1-a1c-2026 is not in patient p2's record"]
 
 
-def test_splits_are_stable_and_roughly_sixty_forty() -> None:
+def test_splits_never_move_once_assigned() -> None:
     qs = [
         Question(
             id=f"q{i}",
@@ -68,12 +93,16 @@ def test_splits_are_stable_and_roughly_sixty_forty() -> None:
             gold_groups=[["Condition/p1-htn"]],
             source="template",
         )
-        for i in range(10)
+        for i in range(200)
     ]
-    first = {q.id: q.split for q in assign_splits(qs)}
+    first = {q.id: q.split for q in assign_splits(qs[:100])}
+    # Order doesn't matter, and adding questions moves none of the earlier ones.
     again = {q.id: q.split for q in assign_splits(list(reversed(qs)))}
-    assert first == again
-    assert list(first.values()).count("dev") == 6
+    assert {k: again[k] for k in first} == first
+    assert 0.5 < list(again.values()).count("dev") / len(again) < 0.7
+    # A split already on file is kept, whatever the hash says.
+    flipped: dict[str, Split] = {k: "test" if v == "dev" else "dev" for k, v in first.items()}
+    assert {q.id: q.split for q in assign_splits(qs[:100], flipped)} == flipped
 
 
 def _questions() -> list[Question]:
