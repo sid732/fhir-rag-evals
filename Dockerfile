@@ -23,5 +23,5 @@ RUN useradd --create-home --uid 1000 app \
 USER app
 
 EXPOSE 8000
-HEALTHCHECK --interval=30s --start-period=10m CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+HEALTHCHECK --interval=30s --start-period=40m CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
 CMD ["sh", "-c", "test -f \"$FHIR_RAG_DB_PATH\" || .venv/bin/python -m fhir_rag.ingest; exec .venv/bin/uvicorn --factory fhir_rag.api.main:create_app --host 0.0.0.0 --port 8000"]

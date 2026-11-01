@@ -73,7 +73,7 @@ curl -s -X POST localhost:8000/patients/<patient-id>/ask \
   -d '{"question": "What was the most recent hemoglobin A1c, and when?"}'
 ```
 
-With Docker: `docker compose up --build`. The container builds its index on first start and keeps it in a volume.
+With Docker: `docker compose up --build`. The container builds its index on first start (about 15 minutes on a laptop CPU, mostly embedding 42,000 cards) and keeps it in a volume.
 
 ## Evals
 
