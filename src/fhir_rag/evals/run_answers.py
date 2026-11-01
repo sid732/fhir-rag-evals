@@ -1,4 +1,4 @@
-"""Answer eval: runs the real answer pipeline on labeled questions (PLAN.md D13-D15).
+"""Answer eval: runs the real answer pipeline on labeled questions (design.md D13-D15).
 
     python -m fhir_rag.evals.run_answers --run NAME [--split dev] [--limit N]
         [--reps 1] [--concurrency 4] [--spend-cap 10] [--no-judge]

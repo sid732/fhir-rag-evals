@@ -1,4 +1,4 @@
-"""Dense retrieval: local embeddings and exact cosine search (PLAN.md D7, D8)."""
+"""Dense retrieval: local embeddings and exact cosine search (design.md D7, D8)."""
 
 import hashlib
 import re

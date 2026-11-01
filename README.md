@@ -52,7 +52,7 @@ Synthea v4.0.0, pinned (data/synthea/generate.sh)
        4. respond    answer, citations with resource URLs, retrieved cards, usage, cost, latency
 ```
 
-The design decisions and the reasons for them are in [docs/PLAN.md](docs/PLAN.md) (D1 to D18). The ones that changed during the build are listed at the end of that file.
+The design decisions and the reasons for them are in [docs/design.md](docs/design.md) (D1 to D18), with what changed during the build and what comes next.
 
 ## Quickstart
 
@@ -85,7 +85,7 @@ make eval-answers RUN=pilot      # real model calls; costs money (see below)
 
 `run_answers` writes one line per question as it finishes, resumes an interrupted run, sends failed attempts to `errors.jsonl` instead of scoring them as wrong, and stops at `--spend-cap` dollars (default 10). The dev split measured $0.0275 per question to answer and $0.015 per answer to judge, about $6.60 for the 164 dev questions it ran on. `make eval-rejudge FROM=<run> RUN=<new-run>` re-grades stored answers with the current judge, which costs only the judge calls. With `FHIR_RAG_LLM_BACKEND=cli`, both go through the Claude Code CLI and use a Claude subscription's limits instead of API credits ([how that differs](docs/evals.md#running-on-a-claude-subscription)).
 
-CI (`.github/workflows/ci.yml`) runs lint, strict mypy, tests and the retrieval eval on every push, and fails on any cross-patient leak or on a drop of more than one question in recall@10, hit@10 or MRR against `evals/baselines/retrieval-dev.json`. The answer eval runs on demand, weekly, and on pull requests labeled `llm-eval` (`.github/workflows/llm-eval.yml`).
+CI (`.github/workflows/ci.yml`) runs lint, strict mypy, tests and the retrieval eval on every push, and fails on any cross-patient leak or on a drop of more than one question in recall@10, hit@10 or MRR against `evals/baselines/retrieval-dev.json`. The answer eval runs on demand and on pull requests labeled `llm-eval` (`.github/workflows/llm-eval.yml`), with the API key as a repository secret. It reports numbers without a pass/fail threshold, because run-to-run noise hasn't been measured yet.
 
 ## Layout
 
@@ -99,13 +99,14 @@ src/fhir_rag/
   ingest.py    build the index
 data/          synthea/ (pinned generation), cohort/ (committed bundles)
 evals/         questions/, baselines/, reports/
-docs/          PLAN.md, data.md (cohort profile), evals.md
+docs/          design.md, data.md (cohort profile), evals.md
 ```
 
 ## Limitations
 
 - Synthea's clinical notes are generated from the structured record, so they repeat facts that are already in other resources. Results on real clinician notes would differ.
 - All 275 questions come from templates whose gold labels are computed from the raw bundles. There are no hand-written questions yet, so wording varies less than real use would.
+- Each answer number comes from one run. Run-to-run noise isn't measured, so small differences between dev and test, or between two runs, mean little.
 - BM25 has no stemming. "Does the patient smoke?" misses the card that says "Never smoked tobacco"; most of the remaining retrieval misses are that question.
 - The pinned summary puts about 28 cards in front of every question (about 38 cards in all). That's affordable at this scale, and the same-budget comparison above shows the gain isn't just from the extra cards.
 - One patient per question. Questions across patients, such as cohort queries, are out of scope.

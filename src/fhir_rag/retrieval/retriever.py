@@ -1,4 +1,4 @@
-"""Patient-scoped retrieval (PLAN.md D5, D6).
+"""Patient-scoped retrieval (design.md D5, D6).
 
 Every query is filtered to one patient's cards before any scoring, so another
 patient's record can never reach the prompt. Within that patient:

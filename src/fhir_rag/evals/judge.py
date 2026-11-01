@@ -1,4 +1,4 @@
-"""Faithfulness judge (PLAN.md D14): is each answer sentence supported by the record?
+"""Faithfulness judge (design.md D14): is each answer sentence supported by the record?
 
 A separate Claude call (claude-sonnet-5-5 by default, a different model from
 the generator) grades every answer sentence. Claims about specific entries

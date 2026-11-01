@@ -2,7 +2,7 @@
 
 The loader returns plain dicts. Typed views of single resources live in
 fhir_rag.fhir.views, which keeps this module the one piece the service and
-the gold-label generator share (PLAN.md D12).
+the gold-label generator share (design.md D12).
 """
 
 import gzip

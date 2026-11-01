@@ -1,7 +1,7 @@
 """Generate template questions with gold labels computed from the raw bundles.
 
 This module parses FHIR on its own, with plain dict access, and imports
-nothing from the service except the bundle loader (PLAN.md D12). If the
+nothing from the service except the bundle loader (design.md D12). If the
 service's views or cards misread a field, the labels here won't share the
 mistake, and the eval will show it.
 

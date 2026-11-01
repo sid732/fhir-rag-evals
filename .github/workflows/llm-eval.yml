@@ -1,7 +1,8 @@
-# Answer eval with real model calls: on demand, weekly, and on pull requests
-# labeled llm-eval. Costs money, so it has a spend cap and isn't run on every
-# push. It reports numbers without failing until the run-to-run noise has been
-# measured; then thresholds go above that noise.
+# Answer eval with real model calls: on demand and on pull requests labeled
+# llm-eval. Needs the ANTHROPIC_API_KEY repository secret. Costs money, so it
+# has a spend cap and isn't run on every push. It reports numbers without
+# failing: a threshold has to sit above the run-to-run noise, which hasn't been
+# measured yet (design.md D16).
 name: llm-eval
 
 on:
@@ -17,8 +18,6 @@ on:
       spend_cap:
         description: Stop starting new questions after this many dollars
         default: "10"
-  schedule:
-    - cron: "0 6 * * 1" # Mondays, 06:00 UTC
   pull_request:
     types: [labeled, synchronize]
 

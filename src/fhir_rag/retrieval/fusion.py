@@ -1,4 +1,4 @@
-"""Reciprocal Rank Fusion (PLAN.md D6).
+"""Reciprocal Rank Fusion (design.md D6).
 
 Each list contributes 1 / (k + rank) for every item it ranks, ranks starting
 at 1. Only ranks matter, so BM25 scores and cosine similarities never need to

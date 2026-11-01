@@ -1,4 +1,4 @@
-"""SQLite storage for resources, cards and embeddings (PLAN.md D8).
+"""SQLite storage for resources, cards and embeddings (design.md D8).
 
 One file holds everything the service reads. Embeddings are keyed by
 (model, SHA-256 of the card text), so rebuilding the index only re-embeds

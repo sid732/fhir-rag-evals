@@ -1,4 +1,4 @@
-"""Typed views of the FHIR R4 resources the service indexes (PLAN.md D2, D3).
+"""Typed views of the FHIR R4 resources the service indexes (design.md D2, D3).
 
 Each view reads only the fields the cards and the gold labels need and
 ignores everything else, so a Synthea upgrade that adds fields can't break
@@ -249,7 +249,7 @@ class DiagnosticReportView(ResourceView):
 
     @property
     def is_note(self) -> bool:
-        """Synthea's note reports duplicate a DocumentReference (PLAN.md D3)."""
+        """Synthea's note reports duplicate a DocumentReference (design.md D3)."""
         return bool(self.presented_form)
 
 
@@ -315,7 +315,7 @@ VIEW_TYPES: dict[str, type[ResourceView]] = {
     "Device": DeviceView,
     "ImagingStudy": ImagingStudyView,
 }
-"""The index allowlist (PLAN.md D3). Billing, Provenance, Medication,
+"""The index allowlist (design.md D3). Billing, Provenance, Medication,
 MedicationAdministration, SupplyDelivery and CareTeam are left out; see
 docs/data.md for their share of the bundles."""
 

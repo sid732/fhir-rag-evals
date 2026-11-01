@@ -1,4 +1,4 @@
-"""Render indexed resources as short text cards (PLAN.md D4).
+"""Render indexed resources as short text cards (design.md D4).
 
 One card per resource, except clinical notes, which become one card per
 chunk. A card's id is the FHIR reference ("Observation/<id>"), with "#<n>"

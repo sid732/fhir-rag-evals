@@ -1,4 +1,4 @@
-"""The labeled question set (PLAN.md D12) and its dev/test split.
+"""The labeled question set (design.md D12) and its dev/test split.
 
 Gold evidence is a list of groups. Each group is a set of interchangeable
 resource refs: citing or retrieving any one of them counts for the group.

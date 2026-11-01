@@ -1,4 +1,4 @@
-"""Metric definitions (PLAN.md D13). Pure functions over refs and text.
+"""Metric definitions (design.md D13). Pure functions over refs and text.
 
 Gold evidence is a list of groups of interchangeable refs (questions.py).
 Retrieved and cited items may be card ids ("DocumentReference/x#2"); they
@@ -126,7 +126,7 @@ def key_facts_present(answer: str, key_facts: Sequence[str]) -> float:
 
 @dataclass(frozen=True)
 class Abstention:
-    """Counts for answerable vs not-in-record questions (PLAN.md D11)."""
+    """Counts for answerable vs not-in-record questions (design.md D11)."""
 
     answered_answerable: int = 0
     abstained_answerable: int = 0  # false abstention

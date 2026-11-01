@@ -1,4 +1,4 @@
-"""Claude behind a small interface (PLAN.md D9), so tests and evals can swap in fakes.
+"""Claude behind a small interface (design.md D9), so tests and evals can swap in fakes.
 
 AnthropicLLM uses structured outputs (`messages.parse` with a Pydantic
 schema) and the API's server-side refusal fallback (`fallbacks="default"`):

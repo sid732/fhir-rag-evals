@@ -1,10 +1,10 @@
-"""Calibrate the faithfulness judge against hand labels (PLAN.md D14).
+"""Calibrate the faithfulness judge against hand labels (design.md D14).
 
     python -m fhir_rag.evals.calibrate sample --run NAME [--n 50] [--set SET]
     python -m fhir_rag.evals.calibrate score [--set SET] [--run NAME]
 
 `sample` picks judged sentences from a run and writes them to
-evals/labels/SET.md for a human to label: each sentence with its whole
+evals/labels/SET.md for a labeler: each sentence with its whole
 answer, the cards it cites, and everything the model saw. The judge's
 verdicts go to SET.verdicts.jsonl so labeling stays blind. Write s, p or n on
 each `label:` line (supported, partially supported, not supported), with a

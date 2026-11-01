@@ -1,6 +1,6 @@
 """Answer a question: retrieve, call Claude with a schema, check every citation.
 
-PLAN.md D10 and D11. The model returns sentences, each with the ids of the
+design.md D10 and D11. The model returns sentences, each with the ids of the
 excerpts it relies on, or status "not_in_record". Code then checks each
 citation against what was actually retrieved: citations to anything else are
 removed from the answer and reported, never shown as evidence.

@@ -1,4 +1,4 @@
-"""JSON logs with a request id on every line (PLAN.md D17).
+"""JSON logs with a request id on every line (design.md D17).
 
 Logs carry ids, counts, timings and token usage. They never carry question
 text or record text: with real PHI, the same rule keeps the logs out of

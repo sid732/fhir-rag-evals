@@ -145,7 +145,7 @@ It is close to the API path, not the same:
 - Structured output takes an extra model turn, so model calls are slower: 8.0 s and 16.2 s through the CLI against 4.3 s and 4.4 s through the API, on the same two dev questions.
 - There is no refusal fallback; Claude Code retries rate limits and server errors itself.
 
-On those two questions the CLI answers stated the same values and dates as the API answers, and the judge (also through the CLI) marked every sentence supported. A CLI run's cost is the list price of its tokens, though nothing is billed, and its latency isn't the API's. The cost and latency in the README come from API runs.
+On those two questions the CLI answers stated the same values and dates as the API answers, and the judge (also through the CLI) marked every sentence supported. A CLI run's cost is the list price of its tokens, though nothing is billed, and its latency isn't the API's. In the README, dev's cost and latency come from an API run and test's from the CLI.
 
 ## Not measured yet
 

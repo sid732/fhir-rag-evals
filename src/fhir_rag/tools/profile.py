@@ -1,7 +1,7 @@
 """Profile the cohort: resource counts and sizes, note lengths, common codes.
 
 `make profile` writes the result to docs/data.md. The numbers decide which
-resource types get indexed (PLAN.md D3) and how notes get split (D4).
+resource types get indexed (design.md D3) and how notes get split (D4).
 """
 
 import json

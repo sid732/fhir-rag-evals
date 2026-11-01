@@ -1,4 +1,4 @@
-"""Okapi BM25 over one patient's cards (PLAN.md D6).
+"""Okapi BM25 over one patient's cards (design.md D6).
 
 Written out rather than taken from a library: a patient has at most ~14k
 cards, so scoring every posting with numpy is fast, and every term of the

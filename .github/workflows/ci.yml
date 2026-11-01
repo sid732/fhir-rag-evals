@@ -1,5 +1,5 @@
 # Every push and pull request: lint, types, tests, and the retrieval eval gate.
-# No API key needed; nothing here costs money (PLAN.md D16).
+# No API key needed; nothing here costs money (design.md D16).
 name: ci
 
 on:
