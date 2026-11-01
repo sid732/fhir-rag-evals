@@ -111,3 +111,7 @@ docs/          design.md, data.md (cohort profile), evals.md
 - The pinned summary puts about 28 cards in front of every question (about 38 cards in all). That's affordable at this scale, and the same-budget comparison above shows the gain isn't just from the extra cards.
 - One patient per question. Questions across patients, such as cohort queries, are out of scope.
 - No authentication. With real PHI this would need SMART on FHIR authorization (scopes such as `patient/Observation.rs`), a BAA with the model provider, and an access audit log kept apart from the application logs. The logs here already carry no question or record text.
+
+## License
+
+[MIT](LICENSE).

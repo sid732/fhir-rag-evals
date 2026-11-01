@@ -2,6 +2,8 @@
 name = "fhir-rag-evals"
 version = "0.1.0"
 description = "Question answering over synthetic FHIR R4 records, with cited answers and an evaluation harness"
+license = "MIT"
+license-files = ["LICENSE"]
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
