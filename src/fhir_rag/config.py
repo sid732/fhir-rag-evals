@@ -9,6 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 type RetrievalMode = Literal["bm25", "dense", "hybrid"]
 type Effort = Literal["low", "medium", "high", "xhigh", "max"]
+type LLMBackend = Literal["api", "cli"]
 
 
 class Settings(BaseSettings):
@@ -37,6 +38,15 @@ class Settings(BaseSettings):
     max_output_tokens: int = 8000
     llm_timeout_s: float = 90.0
     llm_max_retries: int = 2
+
+    # "api" calls the Anthropic API with ANTHROPIC_API_KEY, billed per token.
+    # "cli" runs the Claude Code CLI (`claude -p`) on a logged-in Claude
+    # subscription instead; see ClaudeCodeLLM for how it differs.
+    llm_backend: LLMBackend = "api"
+    claude_cli: str = "claude"
+    # The Claude Code login the CLI backend uses (its CLAUDE_CONFIG_DIR).
+    # Unset uses the CLI's default login.
+    claude_config_dir: Path | None = None
 
     # Read without the prefix, as the Anthropic SDK does. Never logged.
     anthropic_api_key: SecretStr | None = Field(default=None, validation_alias="ANTHROPIC_API_KEY")

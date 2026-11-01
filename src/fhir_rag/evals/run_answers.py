@@ -12,7 +12,7 @@ and are never scored as wrong answers. A run stops starting new questions
 once the recorded cost reaches --spend-cap dollars.
 
 --mode oracle answers from the gold labels and --mode null answers "I don't
-know" with no citations. Neither calls the API (unless the judge is on), and
+know" with no citations. Neither calls a model (unless the judge is on), and
 together they test the harness: oracle should score near the top and null
 near zero. evals/reports/answers-NAME.md summarizes a run.
 """
@@ -40,7 +40,7 @@ from fhir_rag.evals.metrics import (
 from fhir_rag.evals.questions import Question, Split, load_questions
 from fhir_rag.evals.report_answers import write_report
 from fhir_rag.llm.answer import AnswerResult, AnswerService
-from fhir_rag.llm.client import AnthropicLLM, FakeLLM, LLMClient, LLMError
+from fhir_rag.llm.client import FakeLLM, LLMClient, LLMError, make_llm
 from fhir_rag.retrieval.dense import Embedder
 from fhir_rag.retrieval.retriever import Retriever
 from fhir_rag.store import Store
@@ -233,7 +233,9 @@ def main(argv: Sequence[str] | None = None, embedder: Embedder | None = None) ->
     parser.add_argument("--limit", type=int, default=None, help="first N questions only")
     parser.add_argument("--reps", type=int, default=1)
     parser.add_argument("--concurrency", type=int, default=4)
-    parser.add_argument("--spend-cap", type=float, default=10.0, help="dollars")
+    parser.add_argument(
+        "--spend-cap", type=float, default=10.0, help="dollars at list price, billed or not"
+    )
     parser.add_argument("--no-judge", action="store_true")
     parser.add_argument("--mode", choices=["real", "oracle", "null"], default="real")
     args = parser.parse_args(argv)
@@ -241,15 +243,15 @@ def main(argv: Sequence[str] | None = None, embedder: Embedder | None = None) ->
     settings = get_settings()
     split: Split | None = None if args.split == "all" else args.split
     questions = load_questions(QUESTIONS, split)[: args.limit]
-    key = settings.anthropic_api_key.get_secret_value() if settings.anthropic_api_key else None
-    needs_api = args.mode == "real" or not args.no_judge
-    if needs_api and key is None:
+    real = make_llm(settings)
+    needs_llm = args.mode == "real" or not args.no_judge
+    if needs_llm and real is None:
         print(
-            "ANTHROPIC_API_KEY is not set; use --mode oracle|null with --no-judge",
+            "ANTHROPIC_API_KEY is not set; set FHIR_RAG_LLM_BACKEND=cli to use the Claude Code "
+            "CLI instead, or use --mode oracle|null with --no-judge",
             file=sys.stderr,
         )
         return 2
-    real = AnthropicLLM(key, settings.llm_timeout_s, settings.llm_max_retries) if key else None
     if embedder is None:
         from fhir_rag.retrieval.dense import FastEmbedEmbedder
 
@@ -272,6 +274,7 @@ def main(argv: Sequence[str] | None = None, embedder: Embedder | None = None) ->
         "cohort": store.meta("cohort_hash") or "",
         "card_version": store.meta("card_version") or "",
         "mode": args.mode,
+        "backend": settings.llm_backend if needs_llm else None,
         "generator": settings.generator_model if args.mode == "real" else args.mode,
         "effort": settings.generator_effort,
         "judge": None if args.no_judge else settings.judge_model,

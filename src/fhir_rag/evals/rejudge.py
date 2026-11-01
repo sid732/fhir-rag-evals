@@ -28,7 +28,7 @@ from fhir_rag.evals.report_answers import write_report
 from fhir_rag.evals.run_answers import CASE_TIMEOUT_S, RUNS, done_cases
 from fhir_rag.fhir.cards import Chunk
 from fhir_rag.llm.answer import CheckedAnswer, CheckedSentence
-from fhir_rag.llm.client import AnthropicLLM, LLMClient, LLMError
+from fhir_rag.llm.client import LLMClient, LLMError, make_llm
 from fhir_rag.retrieval.retriever import Retrieved
 from fhir_rag.store import Store
 
@@ -142,12 +142,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--from", dest="source", required=True, help="run to re-grade")
     parser.add_argument("--run", required=True, help="new run name; goes to evals/runs/NAME")
     parser.add_argument("--concurrency", type=int, default=4)
-    parser.add_argument("--spend-cap", type=float, default=3.0, help="dollars of judge calls")
+    parser.add_argument(
+        "--spend-cap", type=float, default=3.0, help="dollars of judge calls at list price"
+    )
     args = parser.parse_args(argv)
 
     settings = get_settings()
-    if settings.anthropic_api_key is None:
-        print("ANTHROPIC_API_KEY is not set", file=sys.stderr)
+    judge = make_llm(settings)
+    if judge is None:
+        print(
+            "ANTHROPIC_API_KEY is not set; set FHIR_RAG_LLM_BACKEND=cli to use the Claude Code CLI",
+            file=sys.stderr,
+        )
         return 2
     source = RUNS / args.source
     rows = [json.loads(line) for line in (source / "results.jsonl").open() if line.strip()]
@@ -173,10 +179,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         "answers_from": args.source,
         "judge": settings.judge_model,
         "judge_prompt": JUDGE_VERSION,
+        "judge_backend": settings.llm_backend,
     }
     (out_dir / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
-    key = settings.anthropic_api_key.get_secret_value()
-    judge = AnthropicLLM(key, settings.llm_timeout_s, settings.llm_max_retries)
     asyncio.run(rejudge(rows, judge, settings, chunks, out_dir, args.concurrency, args.spend_cap))
     report = write_report(out_dir, Path("evals/reports") / f"answers-{args.run}.md")
     print(f"wrote {report}")

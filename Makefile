@@ -30,11 +30,12 @@ serve:
 eval-retrieval:
 	uv run python -m fhir_rag.evals.run_retrieval --split $(SPLIT)
 
-# Calls the API (generator and judge). Costs money; see --spend-cap.
+# Calls Claude (generator and judge): API credits, or a Claude subscription with
+# FHIR_RAG_LLM_BACKEND=cli. See --spend-cap.
 eval-answers:
 	uv run python -m fhir_rag.evals.run_answers --run $(RUN) --split $(SPLIT)
 
-# Judge an earlier run's answers again with the current judge. Calls the API
+# Judge an earlier run's answers again with the current judge. Calls Claude
 # for the judge only. FROM is the earlier run; RUN names the new one.
 eval-rejudge:
 	uv run python -m fhir_rag.evals.rejudge --from $(FROM) --run $(RUN)

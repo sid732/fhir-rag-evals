@@ -1,5 +1,6 @@
 # docker compose up --build, then open http://localhost:8000/docs
 # Put ANTHROPIC_API_KEY in .env to enable /ask; everything else works without it.
+# The image has no Claude Code CLI, so FHIR_RAG_LLM_BACKEND=cli doesn't work here.
 services:
   api:
     build: .

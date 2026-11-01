@@ -43,6 +43,7 @@ def retriever(store: Store) -> Retriever:
 def settings(tmp_path: Path, cohort_dir: Path) -> Settings:
     return Settings(
         _env_file=None,  # don't read a developer's .env
+        llm_backend="api",  # nor run a real `claude` if the shell picks the CLI backend
         cohort_dir=cohort_dir,
         db_path=tmp_path / "index.sqlite",
         record_as_of=AS_OF,

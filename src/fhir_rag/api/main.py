@@ -36,12 +36,12 @@ from fhir_rag.config import Settings, get_settings
 from fhir_rag.fhir.cards import Chunk
 from fhir_rag.llm.answer import AnswerService
 from fhir_rag.llm.client import (
-    AnthropicLLM,
     LLMBadOutput,
     LLMError,
     LLMRefused,
     LLMTimeout,
     LLMUnavailable,
+    make_llm,
 )
 from fhir_rag.retrieval.retriever import Retriever, UnknownPatientError
 from fhir_rag.store import Store
@@ -54,7 +54,7 @@ class AppState:
     settings: Settings
     store: Store
     retriever: Retriever
-    answers: AnswerService | None  # None when no API key is configured
+    answers: AnswerService | None  # None for the API backend without a key
 
 
 def build_state(settings: Settings) -> AppState:
@@ -64,14 +64,8 @@ def build_state(settings: Settings) -> AppState:
 
     store = Store(settings.db_path)
     retriever = Retriever(store, FastEmbedEmbedder(settings.embedding_model))
-    answers = None
-    if settings.anthropic_api_key is not None:
-        llm = AnthropicLLM(
-            settings.anthropic_api_key.get_secret_value(),
-            settings.llm_timeout_s,
-            settings.llm_max_retries,
-        )
-        answers = AnswerService(retriever, llm, settings)
+    llm = make_llm(settings)
+    answers = AnswerService(retriever, llm, settings) if llm else None
     return AppState(settings, store, retriever, answers)
 
 

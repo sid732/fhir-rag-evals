@@ -56,6 +56,12 @@ def write_report(run_dir: Path, out: Path) -> Path:
             f"Answers reused from run {meta['answers_from']} and judged again; "
             "the generator cost below was spent there."
         )
+    if "cli" in (meta.get("backend"), meta.get("judge_backend")):
+        lines.append(
+            "Calls made through the Claude Code CLI (backend `cli`) ran on a subscription and "
+            "weren't billed: their cost below is the list price of the tokens they used, and "
+            "their model-call latency is the CLI's time in API calls."
+        )
     if errors:
         kinds: dict[str, int] = {}
         for e in errors:
