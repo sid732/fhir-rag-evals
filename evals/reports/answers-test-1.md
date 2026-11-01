@@ -2,6 +2,8 @@
 
 commit: `61bfd3d+dirty`, cohort: `57e36fe7e8f2`, card_version: `1`, mode: `real`, backend: `cli`, generator: `claude-opus-5-5`, effort: `medium`, judge: `claude-sonnet-5-5`, judge_prompt: `judge_v3-d86cce01`, retrieval: `hybrid, k=10, series=3, summary=True`, split: `test`
 
+Commit `61bfd3d` became `6d1d927` when this repo's history was rewritten on 2026-11-01. `+dirty` means the run included changes that weren't committed yet.
+
 110 graded cases, 0 failed attempts (not scored).
 Calls made through the Claude Code CLI (backend `cli`) ran on a subscription and weren't billed: their cost below is the list price of the tokens they used, and their model-call latency is the CLI's time in API calls.
 

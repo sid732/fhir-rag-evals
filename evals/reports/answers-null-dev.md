@@ -1,6 +1,6 @@
 # Answer eval: null-dev
 
-commit: `61bfd3d+dirty`, cohort: `57e36fe7e8f2`, card_version: `1`, mode: `null`, backend: `None`, generator: `null`, effort: `medium`, judge: `None`, judge_prompt: `None`, retrieval: `hybrid, k=10, series=3, summary=True`, split: `dev`
+commit: `e529634`, cohort: `57e36fe7e8f2`, card_version: `1`, mode: `null`, backend: `None`, generator: `null`, effort: `medium`, judge: `None`, judge_prompt: `None`, retrieval: `hybrid, k=10, series=3, summary=True`, split: `dev`
 
 166 graded cases, 0 failed attempts (not scored).
 
@@ -40,7 +40,7 @@ commit: `61bfd3d+dirty`, cohort: `57e36fe7e8f2`, card_version: `1`, mode: `null`
 | Judge cost per case | $0.0000 |
 | Input tokens per case (mean) | 2390 |
 | Output tokens per case (mean) | 50 |
-| Latency p50 / p95, whole request | 0.02 s / 0.20 s |
+| Latency p50 / p95, whole request | 0.01 s / 0.20 s |
 | Latency p50 / p95, model call | 0.00 s / 0.00 s |
 
 ## Lowest-scoring answers
@@ -58,7 +58,7 @@ commit: `61bfd3d+dirty`, cohort: `57e36fe7e8f2`, card_version: `1`, mode: `null`
 | active-problems:9292c3d5 | - | 0.00 | I don't know. |
 | active-problems:d4f2a6f8 | - | 0.00 | I don't know. |
 | active-problems:ef5e136c | - | 0.00 | I don't know. |
+| current-meds:0e6e0d73 | - | 0.00 | I don't know. |
 | current-meds:0eeb6aa3 | - | 0.00 | I don't know. |
 | allergies:760e0542 | - | 0.00 | I don't know. |
-| current-meds:0e6e0d73 | - | 0.00 | I don't know. |
 | current-meds:3ab4eeae | - | 0.00 | I don't know. |

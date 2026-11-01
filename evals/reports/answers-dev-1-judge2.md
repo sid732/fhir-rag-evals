@@ -2,6 +2,8 @@
 
 commit: `248b54a+dirty`, cohort: `57e36fe7e8f2`, mode: `real`, generator: `claude-opus-5-5`, effort: `medium`, judge: `claude-sonnet-5-5`, retrieval: `hybrid, k=10, series=3, summary=True`, split: `dev`, answers_from: `dev-1`, judge_prompt: `judge_v2-9a419bb8`
 
+Commit `248b54a` became `5a379c9` when this repo's history was rewritten on 2026-11-01. `+dirty` means the run included changes that weren't committed yet.
+
 164 graded cases, 0 failed attempts (not scored).
 Answers reused from run dev-1 and judged again; the generator cost below was spent there.
 

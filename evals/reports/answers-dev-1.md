@@ -2,6 +2,8 @@
 
 commit: `248b54a`, cohort: `57e36fe7e8f2`, mode: `real`, generator: `claude-opus-5-5`, effort: `medium`, judge: `claude-sonnet-5-5`, retrieval: `hybrid, k=10, series=3, summary=True`, split: `dev`
 
+Commit `248b54a` became `5a379c9` when this repo's history was rewritten on 2026-11-01.
+
 164 graded cases, 0 failed attempts (not scored).
 
 ## Abstention
