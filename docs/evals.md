@@ -4,7 +4,7 @@ How the evaluation harness works, what each number means, and what hasn't been m
 
 ## The question set
 
-`evals/questions/questions.jsonl` holds 275 questions over the 15 patients, built by `make questions`. Each question has a patient, a category, gold evidence, optional key facts, a source, and a split.
+`evals/questions/questions.jsonl` holds 295 questions over the 15 patients, built by `make questions`. Each question has a patient, a category, gold evidence, optional key facts, a source, and a split.
 
 | Category | Dev | Test | Examples |
 |---|---:|---:|---|
@@ -12,6 +12,7 @@ How the evaluation harness works, what each number means, and what hasn't been m
 | values_dates | 60 | 40 | latest lab result and date, latest blood pressure, latest lipid panel, last flu shot, last visit, last colonoscopy |
 | lay_terms | 18 | 12 | "Has the patient ever been diagnosed with high blood pressure?" |
 | multi_step | 31 | 19 | medications prescribed for a condition, HbA1c trend over three results, reason for the last ER visit |
+| rare_history | 15 | 5 | a resolved condition recorded once and in at most 2 of the 15 patients: rheumatoid arthritis, eclampsia, a rotator cuff injury |
 | not_in_record | 23 | 15 | labs never measured, conditions never diagnosed, tests Synthea never generates (blood type, HIV viral load), colonoscopy never done |
 
 **Gold labels are computed from the raw bundles** by `src/fhir_rag/evals/templates.py`, which parses FHIR with plain dict access and shares nothing with the service except the bundle loader. A parsing bug in the service's views or cards can't hide in the labels too. `build_questions` checks that every gold ref exists in that patient's record and that every "not in record" question has no gold.
@@ -50,7 +51,7 @@ For every case: a confusion matrix of answered vs "not in record" against answer
 
 ## Harness checks
 
-- `make eval-selftest` runs **oracle** answers (built from the gold labels) and **null** answers ("I don't know", no citations) through the whole pipeline. On dev, the oracle gets key facts 1.000, precision 0.951 and recall 0.951 (the same as the context recall, its true ceiling), and abstains correctly on every "not in record" question. Null gets 0 on precision, recall and key facts, and never abstains. Two bugs were caught this way and fixed: precision and recall were counting citations that had already been removed, and two metrics passed empty answers vacuously.
+- `make eval-selftest` runs **oracle** answers (built from the gold labels) and **null** answers ("I don't know", no citations) through the whole pipeline. On dev, the oracle gets key facts 1.000, precision 0.956 and recall 0.956 (the same as the context recall, its true ceiling), and abstains correctly on every "not in record" question. Null gets 0 on precision, recall and key facts, and never abstains. Two bugs were caught this way and fixed: precision and recall were counting citations that had already been removed, and two metrics passed empty answers vacuously.
 - Failed attempts (timeouts, API errors, refusals, unparseable output) go to `errors.jsonl` with a failure class and are never scored as wrong answers. Every case is written as it finishes, and an interrupted run resumes.
 - The model that served each answer is recorded. If a refusal fallback answered instead of the requested model, the row is flagged.
 - Each report records the commit, cohort hash, card version, models, effort and retrieval settings.
@@ -147,8 +148,31 @@ It is close to the API path, not the same:
 
 On those two questions the CLI answers stated the same values and dates as the API answers, and the judge (also through the CLI) marked every sentence supported. A CLI run's cost is the list price of its tokens, though nothing is billed, and its latency isn't the API's. In the README, dev's cost and latency come from an API run and test's from the CLI.
 
+## Rare, one-time conditions
+
+A clinician reading a long record can miss a condition that appears once, years ago. The `rare_history` questions test that case: "Has the patient ever been diagnosed with X? If so, when?" for a Condition that is resolved, recorded once in that patient's record, and recorded for at most 2 of the 15 patients. Resolved conditions aren't in the pinned summary, so the one card has to be found among the patient's whole history (up to ~14,000 cards). A condition the `lay_terms` questions already cover is left out, at most three are asked per patient, and a same-day condition that also qualifies shares the gold group, because Synthea often codes one event twice (a concussion and "concussion with no loss of consciousness"). That gives 20 questions, 15 dev and 5 test, from rheumatoid arthritis in 2013 to an epidermal burn in 2026.
+
+**Retrieval** found the gold card for all 20 in every configuration, including BM25 alone: the question names the condition, so the lexical match is exact.
+
+**Answers** ([rare-1](../evals/reports/answers-rare-1.md), both splits together, through the CLI backend):
+
+| Metric | Rare history (20) |
+|---|---:|
+| Answered (none said "not in record") | 20 / 20 |
+| Key facts present (the onset date) | 1.000 |
+| Citation recall | 1.000 |
+| Numbers and dates in cited cards | 1.000 |
+| Faithfulness, judge v3 | 0.958 |
+| Cost per question, generator + judge | $0.057 at list price, not billed |
+| Latency p50 / p95, whole request | 5.4 s / 8.3 s |
+
+The two flagged sentences (about an injury of the neck and a strep throat) say the diagnosis was made at a same-day visit. The encounter's reason and the condition's onset match, but no excerpt says the diagnosis was made there, so the judge called it an inference. The condition and the date were right in both.
+
+This shows the model doesn't drop a single old entry when the question names it. It doesn't show what happens when the question uses other words, or when a rare entry sits in a long list the answer has to give in full. "Rare" also means rare in this 15-patient cohort, not rare in medicine.
+
 ## Not measured yet
 
 - Judge agreement with clinician labels.
+- Rare conditions asked in plain words, and lists where a rare entry could be left out.
 - Run-to-run noise: three repetitions of the dev answer eval (`--reps 3`). The answer-eval CI gate waits on this number.
 - Whether a whole run through the CLI backend scores the same as one through the API.

@@ -37,7 +37,7 @@ from fhir_rag.evals.metrics import (
     resource_of,
     unsupported_numbers_and_dates,
 )
-from fhir_rag.evals.questions import Question, Split, load_questions
+from fhir_rag.evals.questions import CATEGORIES, Question, Split, load_questions
 from fhir_rag.evals.report_answers import write_report
 from fhir_rag.llm.answer import AnswerResult, AnswerService
 from fhir_rag.llm.client import FakeLLM, LLMClient, LLMError, make_llm
@@ -230,6 +230,7 @@ def main(argv: Sequence[str] | None = None, embedder: Embedder | None = None) ->
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--run", required=True, help="run name; results go to evals/runs/NAME")
     parser.add_argument("--split", choices=["dev", "test", "all"], default="dev")
+    parser.add_argument("--category", choices=CATEGORIES, default=None, help="one category only")
     parser.add_argument("--limit", type=int, default=None, help="first N questions only")
     parser.add_argument("--reps", type=int, default=1)
     parser.add_argument("--concurrency", type=int, default=4)
@@ -242,7 +243,11 @@ def main(argv: Sequence[str] | None = None, embedder: Embedder | None = None) ->
 
     settings = get_settings()
     split: Split | None = None if args.split == "all" else args.split
-    questions = load_questions(QUESTIONS, split)[: args.limit]
+    questions = [
+        q
+        for q in load_questions(QUESTIONS, split)
+        if args.category is None or q.category == args.category
+    ][: args.limit]
     real = make_llm(settings)
     needs_llm = args.mode == "real" or not args.no_judge
     if needs_llm and real is None:
@@ -282,6 +287,7 @@ def main(argv: Sequence[str] | None = None, embedder: Embedder | None = None) ->
         "retrieval": f"{settings.retrieval_mode}, k={settings.top_k}, "
         f"series={settings.series_expansion}, summary={settings.pin_summary}",
         "split": args.split,
+        "category": args.category,
     }
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")

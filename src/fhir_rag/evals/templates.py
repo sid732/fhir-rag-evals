@@ -9,8 +9,8 @@ Every question's gold evidence is listed as groups (see questions.py).
 """
 
 import hashlib
-from collections import defaultdict
-from collections.abc import Iterable
+from collections import Counter, defaultdict
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -121,6 +121,9 @@ LAY_TERMS = [
 ]
 LAY_POSITIVES_PER_PATIENT = 2
 PRESCRIBED_FOR_PER_PATIENT = 2
+# A condition is rare when at most this many of the cohort's patients have it.
+RARE_MAX_PATIENTS = 2
+RARE_PER_PATIENT = 3
 
 
 def _ref(r: dict[str, Any]) -> str:
@@ -484,6 +487,49 @@ class _Builder:
                 note="latest EMER Encounter; when it has no reasonCode, the answer should say so",
             )
 
+    # --- rare history ---
+
+    def rare_conditions(self, patients_with: Mapping[str, int]) -> None:
+        """Resolved conditions recorded once, for this patient and at most one other.
+
+        Resolved conditions aren't in the pinned summary, so retrieval has to
+        find the one card among the whole history. A same-day condition that
+        also qualifies is usually the same event coded twice (a concussion and
+        "concussion with no loss of consciousness"), so it shares the group,
+        and only one question is asked per day.
+        """
+        conditions = self.by_type["Condition"]
+        times_recorded = Counter(_first_code(r.get("code"), SNOMED) for r in conditions)
+        lay_codes = {code for term in LAY_TERMS for code in term.codes}
+        eligible = [
+            r
+            for r in conditions
+            if (code := _first_code(r.get("code"), SNOMED))
+            and _label(r.get("code")).endswith("(disorder)")
+            and _first_code(r.get("clinicalStatus")) != "active"
+            and times_recorded[code] == 1
+            and patients_with.get(code, 0) <= RARE_MAX_PATIENTS
+            and code not in lay_codes  # lay_terms may already ask about it
+        ]
+        eligible.sort(key=lambda r: _order(self.pid, "rare:" + _label(r.get("code"))))
+        asked_days: set[str] = set()
+        for r in eligible:
+            day = r.get("onsetDateTime", "")[:10]
+            if not day or day in asked_days or len(asked_days) == RARE_PER_PATIENT:
+                continue
+            asked_days.add(day)
+            same_day = [c for c in eligible if c.get("onsetDateTime", "")[:10] == day]
+            display = _plain(_label(r.get("code")))
+            self.add(
+                f"rare-{display.replace(' ', '-')}",
+                "rare_history",
+                f"Has the patient ever been diagnosed with {display}? If so, when?",
+                [[_ref(c) for c in same_day]],
+                [day],
+                note=f"resolved Condition recorded once, in at most {RARE_MAX_PATIENTS} "
+                "patients' records; same-day qualifying Conditions share the group",
+            )
+
     # --- not in record ---
 
     def never_recorded(self) -> None:
@@ -511,8 +557,28 @@ class _Builder:
             )
 
 
-def template_questions(patient_id: str, bundle: Bundle) -> list[Question]:
-    """All template questions for one patient bundle."""
+def condition_patient_counts(bundles: Iterable[Bundle]) -> Counter[str]:
+    """How many patients' records hold each SNOMED Condition code."""
+    counts: Counter[str] = Counter()
+    for bundle in bundles:
+        counts.update(
+            {
+                code
+                for r in iter_resources(bundle)
+                if r["resourceType"] == "Condition" and (code := _first_code(r.get("code"), SNOMED))
+            }
+        )
+    return counts
+
+
+def template_questions(
+    patient_id: str, bundle: Bundle, patients_with: Mapping[str, int] | None = None
+) -> list[Question]:
+    """All template questions for one patient bundle.
+
+    `patients_with` (from condition_patient_counts over the whole cohort)
+    turns on the rare-condition questions, which need cohort-wide counts.
+    """
     builder = _Builder(patient_id, list(iter_resources(bundle)))
     builder.current_medications()
     builder.active_problems()
@@ -529,6 +595,8 @@ def template_questions(patient_id: str, bundle: Bundle) -> list[Question]:
     builder.prescribed_for()
     builder.a1c_trend()
     builder.last_er_visit()
+    if patients_with is not None:
+        builder.rare_conditions(patients_with)
     builder.missing_lab()
     builder.never_recorded()
     return builder.out

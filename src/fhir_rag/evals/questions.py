@@ -15,7 +15,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-type Category = Literal["fact_lookup", "values_dates", "lay_terms", "multi_step", "not_in_record"]
+type Category = Literal[
+    "fact_lookup", "values_dates", "lay_terms", "multi_step", "rare_history", "not_in_record"
+]
 type Source = Literal["template", "drafted", "human"]
 type Split = Literal["dev", "test"]
 
@@ -24,6 +26,7 @@ CATEGORIES: tuple[Category, ...] = (
     "values_dates",
     "lay_terms",
     "multi_step",
+    "rare_history",
     "not_in_record",
 )
 DEV_SHARE = 0.6

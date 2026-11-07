@@ -8,7 +8,7 @@ What the service does, the decisions behind it, what changed while it was built,
 - **Data.** A pinned Synthea v4.0.0 cohort: 15 adult patients, FHIR R4 with US Core 6.1.0 profiles, Massachusetts. Synthetic only. No real or de-identified patient data anywhere in the project.
 - **Retrieval.** Filtered to one patient before ranking. BM25 plus local embeddings, fused with Reciprocal Rank Fusion, with series expansion and a pinned patient summary. SQLite and numpy, no vector database.
 - **Generation.** Claude with structured output: sentences with cited resource references, or an explicit "not in record". Code checks every citation against what the model was shown.
-- **Evals.** 275 labeled questions with gold labels computed from the raw FHIR bundles by code, split into dev and a held-out test set. Metrics: retrieval hit rate, recall and MRR; citation validity, precision and recall; faithfulness (an LLM judge checked against blind reference labels, plus a deterministic check on numbers and dates); abstention; latency and cost. Confidence intervals on every number.
+- **Evals.** 295 labeled questions with gold labels computed from the raw FHIR bundles by code, split into dev and a held-out test set. Metrics: retrieval hit rate, recall and MRR; citation validity, precision and recall; faithfulness (an LLM judge checked against blind reference labels, plus a deterministic check on numbers and dates); abstention; latency and cost. Confidence intervals on every number.
 - **CI.** The retrieval eval is deterministic and free, so it gates every push and pull request. The answer eval costs money and varies run to run, so it runs on demand, with a spend cap.
 
 ## Scope
@@ -150,7 +150,7 @@ Each entry gives the decision, why, what else was considered, and what would cha
 
 ### D12. Question set: gold labels computed from the record
 
-- **Decision.** 275 questions over the cohort, in five categories, stored as JSONL. Each item has the patient ID, question, category, gold evidence, expected key facts, a source and a split.
+- **Decision.** 295 questions over the cohort, in six categories, stored as JSONL. Each item has the patient ID, question, category, gold evidence, expected key facts, a source and a split.
 
   | Category | Example |
   |---|---|
@@ -158,6 +158,7 @@ Each entry gives the decision, why, what else was considered, and what would cha
   | Values and dates | What was the patient's most recent hemoglobin A1c result, and when was it measured? |
   | Lay terms | Has the patient ever been diagnosed with high blood pressure? If so, when? |
   | Multi-step | Why was the patient last seen in the emergency department, and when? |
+  | Rare history | Has the patient ever been diagnosed with rheumatoid arthritis? If so, when? |
   | Not in record | What is the patient's blood type? |
 
 - **How gold labels are made.** A script reads the raw bundles and computes the answer directly, for example: Observations with LOINC 4548-4, sorted by date, newest first. That script shares no code with the service except the bundle loader, so a parsing bug in the service can't also hide in the labels. `build_questions` checks that every gold ref exists in the patient's record and that "not in record" questions have no gold. Misses in the answer evals are read against the raw bundles; that is how four wrong labels were found on the test split (change 11 below).
@@ -227,8 +228,8 @@ Every metric is reported overall and by category with a 95% bootstrap confidence
 ## Changes during the build
 
 1. **Gold evidence is a list of groups** (D12, D13). Several questions have interchangeable evidence: any prescription of the right drug answers "what was prescribed for X?". Each group holds interchangeable refs, and recall and citation recall count groups.
-2. **Pinned patient summary** (D6). The first retrieval run showed "current" lists and recency questions failing, because similarity can't see status or dates. Active problems, active medications, allergies, the last three visits and the past year's immunizations now go in front of every context (`retrieval/summary.py`). On dev, recall@10 is 0.735 without it, 0.844 with the same card budget but no summary, and 0.951 with it. On test: 0.708, 0.838, 0.915.
-3. **Series expansion at query time** instead of series cards (D4). When a ranked card belongs to a series (every HbA1c result), its newest three members join the context and the series' other members are skipped. This lifts recall@10 from 0.616 to 0.735 on dev.
+2. **Pinned patient summary** (D6). The first retrieval run showed "current" lists and recency questions failing, because similarity can't see status or dates. Active problems, active medications, allergies, the last three visits and the past year's immunizations now go in front of every context (`retrieval/summary.py`). On dev, recall@10 is 0.760 without it, 0.859 with the same card budget but no summary, and 0.956 with it. On test: 0.723, 0.847, 0.919.
+3. **Series expansion at query time** instead of series cards (D4). When a ranked card belongs to a series (every HbA1c result), its newest three members join the context and the series' other members are skipped. This lifts recall@10 from 0.652 to 0.760 on dev.
 4. **BM25 written out in `retrieval/bm25.py`** instead of the `bm25s` library (D6). Per-patient corpora are at most ~14k cards, so plain numpy postings are fast enough, and every term of the formula is visible.
 5. **Harder templates** were added after the summary saturated the first set: smoking status, latest lipid panel, HbA1c trend, last ER visit reason, last colonoscopy, and tests Synthea never generates.
 6. **anthropic SDK 2.x** was current at install. Calls use `beta.messages.parse` with structured output and the server-side refusal fallback (`fallbacks="default"`); sampling parameters such as temperature no longer exist on these models.
@@ -237,6 +238,7 @@ Every metric is reported overall and by category with a 95% bootstrap confidence
 9. **Judges v2 and v3** (D13, D14), 2026-10-30, after the first full dev run. Judge v1 saw only the cards each sentence cited, so it couldn't check "most recent", "only" or "no record of", and it scored faithfulness 0.635 on answers whose key facts were all correct. v2 checks claims about the whole record against the whole context and facts about entries against the cited cards; on the same answers it scores 0.976. `evals/rejudge.py` re-grades stored answers without calling the generator. v3 followed the same day, after blind reference labels showed most of v2's flags were wrong: it reads each sentence within its answer, counts only the excerpts shown, and writes its reason before its verdict. On a held-out label set it matches v2, and both miss answers that leave out entries found only in clinical notes. [evals.md](evals.md) has both comparisons.
 10. **Claude Code CLI backend** (D9), 2026-10-31. `ClaudeCodeLLM` runs the same calls through `claude -p` on a Claude subscription, picked with `FHIR_RAG_LLM_BACKEND=cli`, so answer evals can run without API credits. The API client stays the default. On two dev questions the CLI gave the same answers and verdicts, with about 1,000 more input tokens per call and model calls two to four times slower. Reports say when a run used it, because its cost is list price rather than billed and its latency is the CLI's. [evals.md](evals.md#running-on-a-claude-subscription) has the details.
 11. **Label fixes and sticky splits** (D12), 2026-10-31. The first test answer run found four wrong labels from two template rules: the last ER visit was taken from visits with a recorded reason, and labs were looked up under one LOINC code although Synthea uses a whole-blood and a serum-or-plasma code for four of them. Both rules are fixed for every patient. Rebuilding the set then showed that splits were assigned by rank within each category, so the two added questions would have moved a dev question to test. Splits are now read from the existing file, and a new question's split depends only on its id's hash. The set is 275 questions (166 dev, 109 test).
+12. **Rare, one-time conditions** (D12), 2026-11-07. A new template asks about resolved conditions recorded once and for at most 2 of the 15 patients, which the pinned summary doesn't cover: 20 questions (15 dev, 5 test), for 295 in all. Retrieval found all 20 in every configuration, and all 20 answers gave the right condition and date. `run_answers --category` runs one category. [evals.md](evals.md#rare-one-time-conditions) has the details.
 
 ## Where to start reading
 
@@ -245,6 +247,7 @@ Smallest and most central first: `fhir/views.py`, `fhir/cards.py`, `retrieval/bm
 ## Future work
 
 - Hand-written questions in `evals/questions/drafted.jsonl`, especially paraphrases and multi-step questions.
+- Rare conditions asked in plain words ("an ear infection" for otitis media), and list questions where a rare entry could be left out.
 - Run-to-run noise: three repetitions of the dev answer eval (`--reps 3`), then an llm-eval threshold above that spread.
 - A clinician-labeled calibration set for the judge.
 - Experiments: Opus 5.5, Sonnet 5.5 and Haiku 5.5 as the generator on quality, cost and latency; k = 5, 10 and 20; a larger or biomedical embedding model; structured output against the Citations feature; BM25 with stemming, for the smoking-status misses.

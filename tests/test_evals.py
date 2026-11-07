@@ -2,7 +2,7 @@ import asyncio
 import json
 from pathlib import Path
 
-from cohort import P1, P2, bundle, observation, patient_one, patient_two
+from cohort import P1, P2, bundle, condition, observation, patient_one, patient_two
 
 from fhir_rag.config import Settings
 from fhir_rag.evals.build_questions import check_gold
@@ -10,7 +10,7 @@ from fhir_rag.evals.questions import Question, Split, assign_splits
 from fhir_rag.evals.rejudge import load_chunks, rejudge
 from fhir_rag.evals.report_answers import write_report
 from fhir_rag.evals.run_answers import null_llm, oracle_llm, run
-from fhir_rag.evals.templates import template_questions
+from fhir_rag.evals.templates import condition_patient_counts, template_questions
 from fhir_rag.llm.answer import AnswerService
 from fhir_rag.llm.client import FakeLLM, LLMTimeout
 from fhir_rag.retrieval.retriever import Retriever
@@ -68,6 +68,44 @@ def test_lab_templates_look_under_every_code_for_the_lab() -> None:
     assert qs["latest-lab-6298-4"].gold_groups == [
         ["Observation/p2-k-blood", "Observation/p2-k-serum"]
     ]
+
+
+def test_rare_condition_questions_ask_about_resolved_one_time_conditions() -> None:
+    def resolved(rid: str, pid: str, code: str, display: str, onset: str) -> dict[str, object]:
+        return condition(rid, pid, code, f"{display} (disorder)", onset, "resolved")
+
+    def sprain(pid: str) -> dict[str, object]:
+        return resolved(f"{pid}-sprain", pid, "70704007", "Sprain of wrist", "2019-02-22")
+
+    history = [
+        *patient_one(),
+        resolved("p1-conc", P1, "110030002", "Concussion injury of brain", "2019-12-04"),
+        resolved(
+            "p1-conc-2", P1, "62106007", "Concussion with no loss of consciousness", "2019-12-04"
+        ),
+        condition(
+            "p1-ra", P1, "69896004", "Rheumatoid arthritis (disorder)", "2013-05-12", "active"
+        ),
+        resolved("p1-otitis-1", P1, "65363002", "Otitis media", "2020-01-01"),
+        resolved("p1-otitis-2", P1, "65363002", "Otitis media", "2022-06-08"),
+        sprain(P1),
+    ]
+    others = [bundle(patient_two()), bundle([sprain("p3")]), bundle([sprain("p4")])]
+    counts = condition_patient_counts([bundle(history), *others])
+    assert counts["70704007"] == 3 and counts["65363002"] == 1
+    asked = [
+        q for q in template_questions(P1, bundle(history), counts) if q.category == "rare_history"
+    ]
+    # The concussion was coded twice on one day: one question, and either code counts.
+    # Not asked: rheumatoid arthritis (active, so in the pinned summary), otitis media
+    # (recorded twice), the sprain (three patients have one) and the sinusitis
+    # (lay_terms covers it).
+    assert len(asked) == 1
+    assert asked[0].gold_groups == [["Condition/p1-conc", "Condition/p1-conc-2"]]
+    assert asked[0].key_facts == ["2019-12-04"]
+    assert asked[0].question.endswith("? If so, when?")
+    # Without cohort counts there are no rare-condition questions.
+    assert all(q.category != "rare_history" for q in template_questions(P1, bundle(history)))
 
 
 def test_gold_checks_catch_refs_from_another_record() -> None:

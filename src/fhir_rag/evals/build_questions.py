@@ -20,7 +20,7 @@ from fhir_rag.evals.questions import (
     load_questions,
     save_questions,
 )
-from fhir_rag.evals.templates import template_questions
+from fhir_rag.evals.templates import condition_patient_counts, template_questions
 from fhir_rag.fhir.loader import (
     iter_resources,
     load_bundle,
@@ -57,11 +57,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     settings = get_settings()
     questions: list[Question] = []
     refs_by_patient: dict[str, set[str]] = {}
-    for path in patient_bundle_paths(settings.cohort_dir):
-        bundle = load_bundle(path)
+    bundles = [load_bundle(path) for path in patient_bundle_paths(settings.cohort_dir)]
+    patients_with = condition_patient_counts(bundles)
+    for bundle in bundles:
         pid = patient_of(bundle)["id"]
         refs_by_patient[pid] = {f"{r['resourceType']}/{r['id']}" for r in iter_resources(bundle)}
-        questions += template_questions(pid, bundle)
+        questions += template_questions(pid, bundle, patients_with)
     if DRAFTED.exists():
         questions += load_questions(DRAFTED)
 
